@@ -1,3 +1,5 @@
+> **MVP funcional v0.1 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
+
 # FARO — OSINT, Antiphishing e Inteligência Investigativa de Fraudes
 
 **Estado:** blueprint integral de produto e engenharia — **sem código-fonte**.  

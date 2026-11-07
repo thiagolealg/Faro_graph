@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FARO — Análise de URLs</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.1</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="eyebrow">OSINT • ANTIFRAUDE • GRAFO DE INDICADORES</div>
+      <h1 id="hero-title">Investigue um link antes de confiar.</h1>
+      <p>Receba uma triagem local de sinais técnicos, justificativas e conexões observáveis. Esta versão não acessa o site remotamente nem confirma fraudes.</p>
+      <form id="analysis-form">
+        <label for="url">URL ou domínio</label>
+        <input id="url" type="text" required maxlength="2048" placeholder="https://exemplo.com.br" autocomplete="off" spellcheck="false">
+        <label for="token">Chave da API (somente nesta sessão)</label>
+        <input id="token" type="password" required placeholder="FARO_API_KEY" autocomplete="off">
+        <details><summary>HTML opcional para análise estrutural (fornecido por você)</summary>
+          <label for="observed_html">Cole o HTML de teste — sem credenciais ou dados pessoais</label>
+          <textarea id="observed_html" rows="5" maxlength="100000" placeholder="&lt;form&gt;...&lt;/form&gt;"></textarea>
+        </details>
+        <button id="submit" type="submit">Analisar endereço <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="note">Não cole URLs com tokens de acesso. Somente caminhos sanitizados são registrados; parâmetros e fragmentos são descartados.</p>
+    </section>
+    <section id="status" role="status" aria-live="polite" class="status hidden"></section>
+    <section id="output" class="results hidden" aria-label="Resultado de investigação">
+      <div class="result-title"><h2>Resultado da investigação</h2><span id="risk-level" class="risk"></span></div>
+      <div class="kpis"><div><span class="caption">Pontuação heurística</span><strong id="score">—</strong></div><div><span class="caption">Confiança</span><strong id="confidence">—</strong></div><div><span class="caption">Cobertura</span><strong id="coverage">—</strong></div></div>
+      <p id="recommendation" class="recommendation"></p>
+      <div class="cols"><div><h3>Evidências</h3><ul id="evidence"></ul></div><div><h3>Relações observadas</h3><ul id="graph"></ul></div></div>
+      <div class="limits"><h3>Limitações</h3><ul id="limitations"></ul></div>
+      <small id="analysis-id"></small>
+    </section>
+    <footer>FARO • MVP demonstrativo • Evidências, não acusações. Nenhuma identificação pessoal automática.</footer>
+  </main>
+  <script src="/main.js" defer></script>
+</body>
+</html>

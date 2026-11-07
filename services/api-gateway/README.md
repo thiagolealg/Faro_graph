@@ -1,3 +1,7 @@
+# FARO API Gateway — MVP
+
+Implementado em `faro_api/` (FastAPI). Consulte [guia de execução](../../docs/delivery/03-mvp-implementado.md). As demais responsabilidades arquiteturais deste diretório são futuras.
+
 # Entrada REST e controle de borda
 
 **Situação:** especificação estrutural; sem código.

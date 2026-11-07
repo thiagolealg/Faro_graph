@@ -1,0 +1,23 @@
+"""Grafo explicavel de indicadores. Nao faz atribuicao de pessoas ou culpabilidade."""
+from .schemas import GraphNode, GraphEdge, GraphResult
+
+
+def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict) -> GraphResult:
+    nodes = [
+        GraphNode(id="url:"+normalized_url, kind="url", label=normalized_url, status="observed"),
+        GraphNode(id="domain:"+hostname, kind="hostname", label=hostname, status="observed"),
+    ]
+    edges = [GraphEdge(source=nodes[0].id, target=nodes[1].id, relationship="has_hostname", certainty="observed")]
+    if registrable_domain != hostname:
+        nodes.append(GraphNode(id="domain:"+registrable_domain, kind="registrable_domain", label=registrable_domain, status="observed"))
+        edges.append(GraphEdge(source="domain:"+hostname, target="domain:"+registrable_domain, relationship="within_domain", certainty="observed"))
+    brand_ev = next((e["id"] for e in evidence if e["code"] == "possible_brand_impersonation"), None)
+    for brand in extra.get("brand_candidates", []):
+        nodes.append(GraphNode(id="brand:"+brand, kind="brand_reference", label=brand, status="reference"))
+        edges.append(GraphEdge(source="domain:"+hostname, target="brand:"+brand, relationship="resembles_brand", certainty="hypothesis", evidence_id=brand_ev))
+    form_ev = next((e["id"] for e in evidence if e["code"] == "cross_domain_sensitive_form"), None)
+    for ext in extra.get("form_action_hosts", []):
+        if ext != hostname:
+            nodes.append(GraphNode(id="domain:"+ext, kind="form_target_hostname", label=ext, status="observed"))
+            edges.append(GraphEdge(source="domain:"+hostname, target="domain:"+ext, relationship="form_target_in_submitted_html", certainty="observed", evidence_id=form_ev))
+    return GraphResult(analysis_id=analysis_id, nodes=nodes, edges=edges, notice="Relacionamentos tecnicos nao provam identidade, participacao ou autoria criminosa. Conteudo HTML e fornecido pelo usuario e nao verificado remotamente.")
