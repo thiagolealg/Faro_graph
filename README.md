@@ -1,8 +1,8 @@
-> **MVP funcional v0.1 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
+> **MVP funcional v0.4 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
 
 # FARO — OSINT, Antiphishing e Inteligência Investigativa de Fraudes
 
-**Estado:** blueprint integral de produto e engenharia — **sem código-fonte**.  
+**Estado:** MVP local v0.4 em desenvolvimento + blueprint de engenharia (sem prontidão para produção).  
 **Versão documental:** 1.1 · **Data:** 07/11/2026 · **Classificação:** arquitetura inicial para validação.  
 **Escopo:** análise de sites/URLs suspeitos, detecção de phishing, monitoramento de marcas, mapeamento de redes de fraude e atribuição investigativa baseada em evidências.
 
@@ -45,15 +45,13 @@ O FARO é especificado como plataforma SaaS B2C/B2B, API-first e multi-tenant. O
 | [Critérios de entrega](docs/delivery/02-definition-of-done.md) | Gates de release |
 | [ADRs](docs/decisions/) | Registros de decisões de arquitetura |
 
-## Estrutura sem código
+## Implementação atual
 
-`apps/` (interfaces), `services/` (módulos), `workers/` (investigação), `models/` (ML), `infra/` (implantação), `contracts/` (esquemas), `tests/` (testes), `docs/` (especificações). Diretórios de implementação contêm somente `.gitkeep` — nenhum código implementado.
+Além dos documentos, há um **MVP local Python/FastAPI** com interface, análise lexical e HTML informado pelo cliente, armazenamento multi-tenant, controles de acesso e grafo técnico. As consultas externas DNS/RDAP/CT são **opcionais**. Nenhum coletor visita a URL investigada; não há TLS ao vivo, navegação isolada ou identificação de responsáveis.
 
-## Como usar este repositório
+- [Executar o MVP](README_MVP.md)
+- [Notas v0.3: DNS](docs/delivery/06-mvp-v03-dns-e-ci.md)
+- [Notas v0.4: RDAP e CT](docs/delivery/07-mvp-v04-rdap-ct.md)
+- [Backlog e decisões](docs/delivery/04-iniciativas-e-tarefas.md)
 
-1. Revisar e aprovar PRD, fluxos de atribuição e requisitos legais.
-2. Validar fontes e licenças comerciais antes de integrações.
-3. Congelar contratos de dados e endpoints da versão 1.
-4. Implementar gradualmente por fases, sem tratar especificação como sistema já operante.
-
-**Importante:** este material não afirma que a ferramenta existe ou detecta fraudes em produção; é a especificação completa para sua construção.
+Este repositório **não** é um detector pronto para comercialização nem comprova crimes. Evidências técnicas têm proveniência, limites e não sustentam atribuição de autoria isoladamente.

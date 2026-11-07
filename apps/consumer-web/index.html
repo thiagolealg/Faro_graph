@@ -8,11 +8,11 @@
 </head>
 <body>
   <main class="shell">
-    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.3</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
+    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.4</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
     <section class="hero" aria-labelledby="hero-title">
       <div class="eyebrow">OSINT • ANTIFRAUDE • GRAFO DE INDICADORES</div>
       <h1 id="hero-title">Investigue um link antes de confiar.</h1>
-      <p>Receba uma triagem local de sinais técnicos, justificativas e conexões observáveis. Esta versão não visita sites remotamente nem confirma fraudes. DNS passivo pode ser consultado quando habilitado pelo operador.</p>
+      <p>Receba uma triagem local de sinais técnicos, justificativas e conexões observáveis. Esta versão não visita sites remotamente nem confirma fraudes. DNS, RDAP e CT podem ser consultados quando habilitados pelo operador.</p>
       <form id="analysis-form">
         <label for="url">URL ou domínio</label>
         <input id="url" type="text" required maxlength="2048" placeholder="https://exemplo.com.br" autocomplete="off" spellcheck="false">
@@ -33,6 +33,7 @@
       <p id="recommendation" class="recommendation"></p>
       <div class="cols"><div><h3>Evidências</h3><ul id="evidence"></ul></div><div><h3>Relações observadas</h3><ul id="graph"></ul></div></div>
       <div class="limits"><h3>DNS passivo</h3><ul id="dns"></ul></div>
+      <div class="cols"><div><h3>RDAP • registro de domínio</h3><ul id="rdap"></ul></div><div><h3>Certificados históricos • CT</h3><ul id="ct"></ul></div></div>
       <div class="limits"><h3>Limitações</h3><ul id="limitations"></ul></div>
       <small id="analysis-id"></small>
     </section>

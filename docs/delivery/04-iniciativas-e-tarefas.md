@@ -24,3 +24,13 @@
 - Endereços locais, IPs e esquemas não permitidos são rejeitados.
 - Chave inválida gera HTTP 401.
 - Testes automatizados passam em ambiente local e são executados por CI.
+
+## Atualizacao v0.4 — consulta RDAP e CT historico (07/11/2026)
+
+**I4 parcialmente entregue:** coleta DNS opt-in (v0.3), RDAP `.br`/`.com`/`.net` e indice historico CT via crt.sh (v0.4), com estados de disponibilidade e proveniencia. Nao alteram o score heuristico, nao analisam certificados TLS em conexao viva e nao identificam operadores.
+
+**Controles implementados em v0.4:** bloqueio de provedores fora de hosts HTTPS autorizados, redirecionamentos proibidos, timeouts e tamanho maximo de resposta, nao armazenamento de respostas brutas RDAP/CT nem dados de titular, testes de dados malformados e salvamento multi-tenant.
+
+**Pendencias da I4:** verificar contratos/licencas, cache/backoff/limites por fornecedor, bootstrap IANA com aprovacao explicita de endpoints, feeds licenciados de reputacao e telemetria. Issue #14 continua aberta para TLS em sandbox e cobertura RDAP adicional.
+
+**Dependencias bloqueantes:** #16 (sandbox efemero, egress/SSRF); #20 (autenticacao web adequada); #21 (observabilidade, politicas de retencao, atualizacao PSL). Nao expor a API publicamente ate a revisao desses controles.

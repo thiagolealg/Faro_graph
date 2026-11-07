@@ -14,8 +14,9 @@ from pydantic import ValidationError
 from .auth import Principal, build_registry
 from .graph import build_graph
 from .passive_dns import PassiveDNSCollector
+from .public_intel import RDAPCollector, CertificateTransparencyCollector
 from .risk import evaluate
-from .schemas import AnalysisRequest, AnalysisResult, DNSObservation, Evidence, GraphResult
+from .schemas import AnalysisRequest, AnalysisResult, DNSObservation, RDAPObservation, CTObservation, Evidence, GraphResult
 from .storage import Storage
 from .url_security import URLValidationError, normalize_url
 
@@ -31,7 +32,11 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
     db = Storage(db_path or os.getenv("FARO_DB_PATH", str(ROOT / ".local" / "faro.sqlite3")))
     dns_enabled = os.getenv("FARO_DNS_ENABLED", "0").lower() in {"1", "true", "yes"}
     dns_collector = PassiveDNSCollector(os.getenv("FARO_DNS_RESOLVER", "1.1.1.1")) if dns_enabled else None
-    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.3.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
+    rdap_enabled = os.getenv("FARO_RDAP_ENABLED", "0").lower() in {"1", "true", "yes"}
+    ct_enabled = os.getenv("FARO_CT_ENABLED", "0").lower() in {"1", "true", "yes"}
+    rdap_collector = RDAPCollector() if rdap_enabled else None
+    ct_collector = CertificateTransparencyCollector() if ct_enabled else None
+    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.4.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
 
     def require_key(x_faro_api_key: str | None = Header(default=None)) -> Principal:
         principal = registry.resolve(x_faro_api_key)
@@ -53,7 +58,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
     @app.get("/healthz", tags=["operations"])
     def healthz():
-        return {"status": "ok", "version": "0.3.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled}
+        return {"status": "ok", "version": "0.4.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False}
 
     @app.post("/v1/analyses", response_model=AnalysisResult, status_code=201, tags=["analysis"])
     def analyze(request: AnalysisRequest, principal: Principal = Depends(require_analyst)):
@@ -70,6 +75,18 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
             evidence.append(Evidence(id="ev-dns-001", code="passive_dns_observation", title="DNS passivo observado",
                 detail="Respostas DNS publicas consultadas para o dominio; nao comprovam participacao em fraude.",
                 source="public_recursive_dns", impact=0, confidence="medium"))
+        rdap = rdap_collector.collect(target.registrable_domain) if rdap_collector else RDAPObservation(
+            status="disabled", source="registry_rdap", note="Consulta RDAP desativada pela configuracao.")
+        ct = ct_collector.collect(target.registrable_domain) if ct_collector else CTObservation(
+            status="disabled", source="crt_sh_ct_index", note="Consulta CT desativada pela configuracao.")
+        if rdap.status == "observed":
+            evidence.append(Evidence(id="ev-rdap-001", code="rdap_registry_observation", title="Registro RDAP consultado",
+                detail="Metadados publicos do registro do dominio consultados; nao identificam autores de fraude.",
+                source="registry_rdap", impact=0, confidence="medium"))
+        if ct.status in {"observed", "partial"} and ct.certificates_matched:
+            evidence.append(Evidence(id="ev-ct-001", code="ct_historical_observation", title="Certificados historicos observados",
+                detail="Registros historicos de transparencia de certificados relacionados ao dominio; nao validam TLS atual.",
+                source="crt_sh_ct_index", impact=0, confidence="medium"))
         analysis_id = str(uuid.uuid4())
         result = AnalysisResult(
             analysis_id=analysis_id,
@@ -80,14 +97,16 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
             assessment=assessment,
             evidence=evidence,
             passive_dns=passive_dns,
+            rdap=rdap,
+            certificate_transparency=ct,
             limitations=[
-                "Nao ha navegacao remota, consultas RDAP/TLS ou feeds de ameaca nesta entrega. DNS passivo e opcional.",
+                "Nao ha navegacao ao site investigado, inspecao TLS ao vivo ou feeds de ameaca nesta entrega. DNS, RDAP e CT sao opcionais.",
                 "HTML opcional e fornecido pelo solicitante e nao e uma evidencia independente.",
                 "A pontuacao e heuristica, nao uma probabilidade calibrada ou confirmacao de fraude.",
                 "O grafo representa indicadores observados/hipoteses, nao responsaveis identificados.",
             ],
         )
-        graph = build_graph(analysis_id, target.url, target.hostname, target.registrable_domain, [e.model_dump() for e in evidence], extras, passive_dns)
+        graph = build_graph(analysis_id, target.url, target.hostname, target.registrable_domain, [e.model_dump() for e in evidence], extras, passive_dns, rdap)
         db.save(result.model_dump(), graph.model_dump(), tenant_id=principal.tenant_id)
         db.audit(principal.tenant_id, principal.actor_id, "analysis.created", analysis_id)
         return result

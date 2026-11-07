@@ -1,4 +1,4 @@
-# FARO Graph MVP v0.3
+# FARO Graph MVP v0.4
 
 O projeto possui um **MVP funcional para execução local**, preservando a arquitetura documental original.
 
@@ -37,21 +37,14 @@ Para desenvolvimento local, `FARO_API_KEY` permanece disponível como compatibil
 
 **Limites de v0.2:** ainda não há navegação remota, inspeção DNS/RDAP/TLS em produção, atribuição de pessoas, bloqueio de SSRF em coletores ativos ou rate limit distribuído por segundo. A quota horária em SQLite é somente uma proteção inicial contra consumo excessivo. O snapshot PSL deve ser atualizado periodicamente e acompanhado de data de origem.
 
-## v0.3 — DNS passivo opt-in, grafo e CI corrigido
+## v0.4 — RDAP e CT (nova entrega)
 
-- Instalador Python empacota somente `faro_api`; elimina o conflito de *flat layout* detectado no GitHub Actions do v0.2.
-- DNS passivo opcional via `dnspython`, consultando **apenas um resolvedor recursivo público configurado**, não o site investigado.
-- Consulta A, AAAA, MX e NS, com limite de respostas, tempo e dados; IPs não globais são filtrados; coleta de TXT desativada.
-- Proveniência, data de observação, TTL, falhas e status `observed` / `partial` / `unavailable` / `disabled`.
-- Arestas temporais no grafo para vínculos DNS; relacionamento com IP ou serviço compartilhado **não comprova envolvimento**.
-- Rate limiting inicial de requisições por minuto por organização, além da quota horária de análises.
+- Coleta RDAP opcional por **provedor oficial fixo**: `.br`, `.com`, `.net`, sem navegação ao site nem coleta de contatos pessoais.
+- Busca histórica de certificados no índice público CT (crt.sh), sem inspecionar a conexão TLS ao vivo.
+- Status explicito `observed`, `partial`, `unsupported`, `unavailable` ou `disabled`; nenhuma ausência de dados é interpretada como legitimidade.
+- Provedores externos consultados **somente quando** `FARO_RDAP_ENABLED=1` e/ou `FARO_CT_ENABLED=1`; o domínio registrável é transmitido a cada serviço.
+- API, grafo temporal, UI e testes de integração exercitam os novos módulos de forma isolada, com transportes simulados.
 
-Configuração opcional (exige rede e autorização do operador para consultar DNS públicos):
+Documentação: [07-mvp-v04-rdap-ct.md](docs/delivery/07-mvp-v04-rdap-ct.md).
 
-```sh
-export FARO_DNS_ENABLED=1
-export FARO_DNS_RESOLVER=1.1.1.1
-export FARO_REQUESTS_PER_MINUTE=120
-```
-
-**Avisos:** DNS passivo divulga o hostname ao provedor recursivo configurado; a aplicação não coleta páginas remotas. Desabilitado por padrão. RDAP, TLS, CT, feeds, sandbox web e investigação de pessoas continuam pendentes. A implementação não possui controles operacionais suficientes para exposição pública irrestrita.
+**Risco pendente:** a aplicação ainda é destinada a uso local/ambiente protegido. Antes de acessar sites remotos, implementar sandbox, egress controlado, controle de destinos DNS e proteção completa contra SSRF. RDAP/CT requerem revisão de privacidade e rate limits por fornecedor.

@@ -47,6 +47,29 @@ class DNSObservation(BaseModel):
     note: str
 
 
+class RDAPObservation(BaseModel):
+    status: Literal["disabled", "unsupported", "observed", "unavailable"]
+    source: str
+    checked_at: str | None = None
+    registered_on: str | None = None
+    expires_on: str | None = None
+    changed_on: str | None = None
+    nameservers: list[str] = Field(default_factory=list)
+    error_codes: list[str] = Field(default_factory=list)
+    note: str
+
+
+class CTObservation(BaseModel):
+    status: Literal["disabled", "observed", "partial", "unavailable"]
+    source: str
+    checked_at: str | None = None
+    certificates_matched: int = Field(default=0, ge=0)
+    latest_not_before: str | None = None
+    issuers: list[str] = Field(default_factory=list)
+    error_codes: list[str] = Field(default_factory=list)
+    note: str
+
+
 class AnalysisResult(BaseModel):
     analysis_id: str
     created_at: str
@@ -58,6 +81,8 @@ class AnalysisResult(BaseModel):
     evidence: list[Evidence]
     limitations: list[str]
     passive_dns: DNSObservation | None = None
+    rdap: RDAPObservation | None = None
+    certificate_transparency: CTObservation | None = None
 
 
 class GraphNode(BaseModel):

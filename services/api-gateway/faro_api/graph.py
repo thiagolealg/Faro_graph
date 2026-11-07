@@ -1,8 +1,8 @@
 """Grafo explicavel de indicadores. Nao faz atribuicao de pessoas ou culpabilidade."""
-from .schemas import GraphNode, GraphEdge, GraphResult, DNSObservation
+from .schemas import GraphNode, GraphEdge, GraphResult, DNSObservation, RDAPObservation
 
 
-def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict, passive_dns: DNSObservation | None = None) -> GraphResult:
+def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict, passive_dns: DNSObservation | None = None, rdap: RDAPObservation | None = None) -> GraphResult:
     nodes = [
         GraphNode(id="url:"+normalized_url, kind="url", label=normalized_url, status="observed"),
         GraphNode(id="domain:"+hostname, kind="hostname", label=hostname, status="observed"),
@@ -33,4 +33,13 @@ def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrabl
             if not any(node.id == node_id for node in nodes):
                 nodes.append(GraphNode(id=node_id, kind=kind, label=record.value, status="observed"))
             edges.append(GraphEdge(source="domain:" + hostname, target=node_id, relationship=relationship, certainty="observed", evidence_id="ev-dns-001"))
-    return GraphResult(analysis_id=analysis_id, nodes=nodes, edges=edges, notice="Relacionamentos tecnicos nao provam identidade, participacao ou autoria criminosa. Conteudo HTML e fornecido pelo usuario e nao verificado remotamente.")
+    if rdap is not None and rdap.status == "observed":
+        domain_source = "domain:" + (registrable_domain if registrable_domain != hostname else hostname)
+        for nameserver in rdap.nameservers:
+            node_id = "dns:" + nameserver
+            if not any(node.id == node_id for node in nodes):
+                nodes.append(GraphNode(id=node_id, kind="dns_provider_hostname", label=nameserver, status="observed"))
+            if not any(edge.source == domain_source and edge.target == node_id and edge.relationship == "rdap_nameserver_at_scan" for edge in edges):
+                edges.append(GraphEdge(source=domain_source, target=node_id, relationship="rdap_nameserver_at_scan",
+                    certainty="observed", evidence_id="ev-rdap-001"))
+    return GraphResult(analysis_id=analysis_id, nodes=nodes, edges=edges, notice="Relacionamentos tecnicos nao provam identidade, participacao ou autoria criminosa. Dados RDAP e CT representam registros publicos e historicos, nao controle atual ou identidade verificada.")

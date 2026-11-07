@@ -34,7 +34,7 @@ form.addEventListener("submit", async (event) => {
     text("#coverage", coverageLabels[result.assessment.coverage] || result.assessment.coverage);
     text("#recommendation", result.assessment.recommendation);
     text("#analysis-id", `ID: ${result.analysis_id} • ${result.hostname}`);
-    for (const id of ["#evidence","#graph","#limitations","#dns"]) document.querySelector(id).replaceChildren();
+    for (const id of ["#evidence","#graph","#limitations","#dns","#rdap","#ct"]) document.querySelector(id).replaceChildren();
     for (const ev of result.evidence) addItem(document.querySelector("#evidence"), `${ev.title}: ${ev.detail} [${ev.source}]`);
     if (!result.evidence.length) addItem(document.querySelector("#evidence"), "Nenhum sinal detectado nesta cobertura restrita. Isso não comprova segurança.");
     for (const edge of graph.edges) addItem(document.querySelector("#graph"), `${edge.source} → ${edge.target} (${edge.relationship}; ${edge.certainty})`);
@@ -42,6 +42,25 @@ form.addEventListener("submit", async (event) => {
       addItem(document.querySelector("#dns"), `Estado: ${result.passive_dns.status} — ${result.passive_dns.note}`);
       for (const record of result.passive_dns.records) addItem(document.querySelector("#dns"), `${record.type}: ${record.value} (TTL: ${record.ttl}s)`);
       if (result.passive_dns.error_codes.length) addItem(document.querySelector("#dns"), `Consultas indisponíveis ou filtradas: ${result.passive_dns.error_codes.join(", ")}`);
+    }
+    if (result.rdap) {
+      const r = result.rdap;
+      addItem(document.querySelector("#rdap"), `Estado: ${r.status} — ${r.note}`);
+      if (r.checked_at) addItem(document.querySelector("#rdap"), `Consultado: ${r.checked_at}`);
+      if (r.registered_on) addItem(document.querySelector("#rdap"), `Registrado: ${r.registered_on}`);
+      if (r.changed_on) addItem(document.querySelector("#rdap"), `Alterado: ${r.changed_on}`);
+      if (r.expires_on) addItem(document.querySelector("#rdap"), `Expira: ${r.expires_on}`);
+      for (const host of r.nameservers) addItem(document.querySelector("#rdap"), `Nameserver: ${host}`);
+      if (r.error_codes.length) addItem(document.querySelector("#rdap"), `Limites/erros: ${r.error_codes.join(", ")}`);
+    }
+    if (result.certificate_transparency) {
+      const c = result.certificate_transparency;
+      addItem(document.querySelector("#ct"), `Estado: ${c.status} — ${c.note}`);
+      if (c.checked_at) addItem(document.querySelector("#ct"), `Consultado: ${c.checked_at}`);
+      addItem(document.querySelector("#ct"), `Certificados históricos encontrados: ${c.certificates_matched}`);
+      if (c.latest_not_before) addItem(document.querySelector("#ct"), `Emissão mais recente observada: ${c.latest_not_before}`);
+      for (const issuer of c.issuers) addItem(document.querySelector("#ct"), `Emissor: ${issuer}`);
+      if (c.error_codes.length) addItem(document.querySelector("#ct"), `Limites/erros: ${c.error_codes.join(", ")}`);
     }
     result.limitations.forEach(value => addItem(document.querySelector("#limitations"), value));
     output.classList.remove("hidden");
