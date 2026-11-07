@@ -15,8 +15,9 @@ from .auth import Principal, build_registry
 from .graph import build_graph
 from .passive_dns import PassiveDNSCollector
 from .public_intel import RDAPCollector, CertificateTransparencyCollector
+from .threat_intel import configured_snapshot
 from .risk import evaluate
-from .schemas import AnalysisRequest, AnalysisResult, DNSObservation, RDAPObservation, CTObservation, Evidence, GraphResult
+from .schemas import AnalysisRequest, AnalysisResult, DNSObservation, RDAPObservation, CTObservation, ThreatIntelObservation, Evidence, GraphResult
 from .storage import Storage
 from .url_security import URLValidationError, normalize_url
 
@@ -36,7 +37,8 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
     ct_enabled = os.getenv("FARO_CT_ENABLED", "0").lower() in {"1", "true", "yes"}
     rdap_collector = RDAPCollector() if rdap_enabled else None
     ct_collector = CertificateTransparencyCollector() if ct_enabled else None
-    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.4.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
+    ti_collector = configured_snapshot()
+    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.5.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
 
     def require_key(x_faro_api_key: str | None = Header(default=None)) -> Principal:
         principal = registry.resolve(x_faro_api_key)
@@ -58,7 +60,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
     @app.get("/healthz", tags=["operations"])
     def healthz():
-        return {"status": "ok", "version": "0.4.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False}
+        return {"status": "ok", "version": "0.5.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False, "reputation_snapshot_enabled": ti_collector is not None}
 
     @app.post("/v1/analyses", response_model=AnalysisResult, status_code=201, tags=["analysis"])
     def analyze(request: AnalysisRequest, principal: Principal = Depends(require_analyst)):
@@ -87,6 +89,25 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
             evidence.append(Evidence(id="ev-ct-001", code="ct_historical_observation", title="Certificados historicos observados",
                 detail="Registros historicos de transparencia de certificados relacionados ao dominio; nao validam TLS atual.",
                 source="crt_sh_ct_index", impact=0, confidence="medium"))
+        intel = ti_collector.check(target) if ti_collector else ThreatIntelObservation(
+            status="disabled", source="local_licensed_snapshot", note="Feed de reputacao local nao configurado.")
+        if intel.matches:
+            # Um hostname em feed e sinal contextual; URL exata e correspondencia mais forte.
+            for idx, match in enumerate(intel.matches):
+                evidence.append(Evidence(id=f"ev-ti-{idx+1:03d}", code="reputation_feed_match",
+                    title="Indicador reportado por fonte de reputacao",
+                    detail=(f"Correspondencia {match.indicator_type} ({match.category}) reportada por {match.source} "
+                            f"em {match.observed_at}, valida ate {match.expires_at}. Nao comprova atividade atual."),
+                    source=match.source, impact=0, confidence="medium"))
+            strongest = 80 if any(m.indicator_type == "url" for m in intel.matches) else 55
+            assessment.score = max(assessment.score, strongest)
+            assessment.level = ("critical" if assessment.score >= 80 else "high" if assessment.score >= 60
+                                else "moderate" if assessment.score >= 35 else "low")
+            assessment.confidence = "medium"
+            assessment.coverage = ("lexical_html_and_feed" if request.observed_html is not None
+                                   else "lexical_and_feed")
+            assessment.recommendation = ("Indicador reportado em fonte autorizada; evite fornecer dados "
+                "ou efetuar pagamentos e confirme a legitimidade por canal oficial independente.")
         analysis_id = str(uuid.uuid4())
         result = AnalysisResult(
             analysis_id=analysis_id,
@@ -99,14 +120,16 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
             passive_dns=passive_dns,
             rdap=rdap,
             certificate_transparency=ct,
+            threat_intel=intel,
             limitations=[
-                "Nao ha navegacao ao site investigado, inspecao TLS ao vivo ou feeds de ameaca nesta entrega. DNS, RDAP e CT sao opcionais.",
+                "Nao ha navegacao ao site investigado ou inspecao TLS ao vivo. DNS, RDAP, CT e feeds locais sao opcionais.",
+                "Feeds sao snapshots locais autorizados e podem estar incompletos ou desatualizados; sem match nao significa site seguro.",
                 "HTML opcional e fornecido pelo solicitante e nao e uma evidencia independente.",
                 "A pontuacao e heuristica, nao uma probabilidade calibrada ou confirmacao de fraude.",
                 "O grafo representa indicadores observados/hipoteses, nao responsaveis identificados.",
             ],
         )
-        graph = build_graph(analysis_id, target.url, target.hostname, target.registrable_domain, [e.model_dump() for e in evidence], extras, passive_dns, rdap)
+        graph = build_graph(analysis_id, target.url, target.hostname, target.registrable_domain, [e.model_dump() for e in evidence], extras, passive_dns, rdap, intel)
         db.save(result.model_dump(), graph.model_dump(), tenant_id=principal.tenant_id)
         db.audit(principal.tenant_id, principal.actor_id, "analysis.created", analysis_id)
         return result

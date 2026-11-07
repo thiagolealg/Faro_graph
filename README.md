@@ -1,4 +1,4 @@
-> **MVP funcional v0.4 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
+> **MVP funcional v0.5 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
 
 # FARO — OSINT, Antiphishing e Inteligência Investigativa de Fraudes
 
@@ -55,3 +55,7 @@ Além dos documentos, há um **MVP local Python/FastAPI** com interface, anális
 - [Backlog e decisões](docs/delivery/04-iniciativas-e-tarefas.md)
 
 Este repositório **não** é um detector pronto para comercialização nem comprova crimes. Evidências técnicas têm proveniência, limites e não sustentam atribuição de autoria isoladamente.
+
+## Entrega v0.5 — reputacao por snapshot autorizado
+
+Indicadores de URL/hostname com validade, origem e evidencia auditavel, carregados de um arquivo local sem enviar URLs a provedores externos. Configuracao opt-in com autorizacao manual; detalhes em [v0.5](docs/delivery/08-mvp-v05-threat-intelligence.md). Sem match nao comprova seguranca.

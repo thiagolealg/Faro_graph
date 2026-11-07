@@ -34,3 +34,12 @@
 **Pendencias da I4:** verificar contratos/licencas, cache/backoff/limites por fornecedor, bootstrap IANA com aprovacao explicita de endpoints, feeds licenciados de reputacao e telemetria. Issue #14 continua aberta para TLS em sandbox e cobertura RDAP adicional.
 
 **Dependencias bloqueantes:** #16 (sandbox efemero, egress/SSRF); #20 (autenticacao web adequada); #21 (observabilidade, politicas de retencao, atualizacao PSL). Nao expor a API publicamente ate a revisao desses controles.
+
+
+## Atualização v0.5 — snapshots locais de reputação (07/11/2026)
+
+**I4 em andamento:** ingestão de inteligência de phishing/malware **por arquivo autorizado** com formato estrito, expiração, fonte, hash, match exato, classificação explicável e zero saída de URLs de clientes. Esta entrega cobre parcialmente #15 (TASK 10); a integração comercial via provedores, gestão de licença e atualizações remotas ficam pendentes.
+
+**I3:** o padrão continua sem requisições remotas. Dados malformados bloqueiam o startup quando a integração está ativa. Logs não devem registrar feeds e URLs completas sensíveis. Implementar futuramente assinatura de feeds, limites de retenção e rotação sem reinício (#21).
+
+**Critérios antes de produção pública:** #20 autenticação OIDC/sessão web e proteção contra abuso, #16 sandbox, contratos de uso dos fornecedores, telemetria e políticas LGPD.

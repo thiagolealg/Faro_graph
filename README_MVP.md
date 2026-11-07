@@ -1,4 +1,4 @@
-# FARO Graph MVP v0.4
+# FARO Graph MVP v0.5
 
 O projeto possui um **MVP funcional para execução local**, preservando a arquitetura documental original.
 
@@ -48,3 +48,21 @@ Para desenvolvimento local, `FARO_API_KEY` permanece disponível como compatibil
 Documentação: [07-mvp-v04-rdap-ct.md](docs/delivery/07-mvp-v04-rdap-ct.md).
 
 **Risco pendente:** a aplicação ainda é destinada a uso local/ambiente protegido. Antes de acessar sites remotos, implementar sandbox, egress controlado, controle de destinos DNS e proteção completa contra SSRF. RDAP/CT requerem revisão de privacidade e rate limits por fornecedor.
+
+
+## v0.5 — inteligência de ameaças por arquivo local autorizado
+
+- Importação **opcional** e validada de arquivo JSONL, sem chamadas aos sites investigados nem envio das URLs de clientes a terceiros.
+- Indicadores URL/hostname, origem, prazo de validade, hash SHA-256 do snapshot, relatório persistido e relação rastreável no grafo.
+- Match de URL exata eleva o risco heurístico mínimo para 80; match só de hostname para 55. Não prova fraude atual ou autoria.
+- O operador deve confirmar licença/uso de dados antes de habilitar; nenhuma fonte comercial é incluída no repositório.
+
+**Exemplo de ativação em ambiente local controlado:**
+
+```sh
+export FARO_TI_ENABLED=1
+export FARO_TI_LICENSE_ACK=1
+export FARO_TI_PATH=/caminho/absoluto/feed-autorizado.jsonl
+```
+
+Consulte [o contrato completo](docs/delivery/08-mvp-v05-threat-intelligence.md). Reinicie o processo após atualizar o arquivo. Nenhum endpoint remoto de fornecedor é acionado pelo módulo v0.5.

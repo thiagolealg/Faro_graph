@@ -1,8 +1,8 @@
 """Grafo explicavel de indicadores. Nao faz atribuicao de pessoas ou culpabilidade."""
-from .schemas import GraphNode, GraphEdge, GraphResult, DNSObservation, RDAPObservation
+from .schemas import GraphNode, GraphEdge, GraphResult, DNSObservation, RDAPObservation, ThreatIntelObservation
 
 
-def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict, passive_dns: DNSObservation | None = None, rdap: RDAPObservation | None = None) -> GraphResult:
+def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict, passive_dns: DNSObservation | None = None, rdap: RDAPObservation | None = None, threat_intel: ThreatIntelObservation | None = None) -> GraphResult:
     nodes = [
         GraphNode(id="url:"+normalized_url, kind="url", label=normalized_url, status="observed"),
         GraphNode(id="domain:"+hostname, kind="hostname", label=hostname, status="observed"),
@@ -42,4 +42,12 @@ def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrabl
             if not any(edge.source == domain_source and edge.target == node_id and edge.relationship == "rdap_nameserver_at_scan" for edge in edges):
                 edges.append(GraphEdge(source=domain_source, target=node_id, relationship="rdap_nameserver_at_scan",
                     certainty="observed", evidence_id="ev-rdap-001"))
+    if threat_intel is not None:
+        for index, match in enumerate(threat_intel.matches):
+            source_id = "feed:" + match.source
+            if not any(node.id == source_id for node in nodes):
+                nodes.append(GraphNode(id=source_id, kind="threat_intel_source", label=match.source, status="reference"))
+            target_node = "url:" + normalized_url if match.indicator_type == "url" else "domain:" + hostname
+            edges.append(GraphEdge(source=target_node, target=source_id,
+                relationship="reported_in_reputation_snapshot", certainty="observed", evidence_id=f"ev-ti-{index+1:03d}"))
     return GraphResult(analysis_id=analysis_id, nodes=nodes, edges=edges, notice="Relacionamentos tecnicos nao provam identidade, participacao ou autoria criminosa. Dados RDAP e CT representam registros publicos e historicos, nao controle atual ou identidade verificada.")

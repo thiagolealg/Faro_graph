@@ -10,7 +10,7 @@ const addItem = (list, value) => {
 };
 const levels = { inconclusive:"Inconclusivo", low:"Baixo", moderate:"Moderado", high:"Alto", critical:"Crítico" };
 const confidenceLabels = { low:"Baixa", medium:"Média", high:"Alta" };
-const coverageLabels = { lexical_only:"Somente URL", lexical_and_submitted_html:"URL + HTML enviado" };
+const coverageLabels = { lexical_only:"Somente URL", lexical_and_submitted_html:"URL + HTML enviado", lexical_and_feed:"URL + feed", lexical_html_and_feed:"URL + HTML + feed" };
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   status.classList.remove("hidden");
@@ -34,7 +34,7 @@ form.addEventListener("submit", async (event) => {
     text("#coverage", coverageLabels[result.assessment.coverage] || result.assessment.coverage);
     text("#recommendation", result.assessment.recommendation);
     text("#analysis-id", `ID: ${result.analysis_id} • ${result.hostname}`);
-    for (const id of ["#evidence","#graph","#limitations","#dns","#rdap","#ct"]) document.querySelector(id).replaceChildren();
+    for (const id of ["#evidence","#graph","#limitations","#dns","#rdap","#ct","#reputation"]) document.querySelector(id).replaceChildren();
     for (const ev of result.evidence) addItem(document.querySelector("#evidence"), `${ev.title}: ${ev.detail} [${ev.source}]`);
     if (!result.evidence.length) addItem(document.querySelector("#evidence"), "Nenhum sinal detectado nesta cobertura restrita. Isso não comprova segurança.");
     for (const edge of graph.edges) addItem(document.querySelector("#graph"), `${edge.source} → ${edge.target} (${edge.relationship}; ${edge.certainty})`);
@@ -61,6 +61,11 @@ form.addEventListener("submit", async (event) => {
       if (c.latest_not_before) addItem(document.querySelector("#ct"), `Emissão mais recente observada: ${c.latest_not_before}`);
       for (const issuer of c.issuers) addItem(document.querySelector("#ct"), `Emissor: ${issuer}`);
       if (c.error_codes.length) addItem(document.querySelector("#ct"), `Limites/erros: ${c.error_codes.join(", ")}`);
+    }
+    if (result.threat_intel) {
+      const i = result.threat_intel;
+      addItem(document.querySelector("#reputation"), `Estado: ${i.status} — ${i.note}`);
+      for (const m of i.matches) addItem(document.querySelector("#reputation"), `${m.indicator_type}: ${m.category} [${m.source}] (validade: ${m.expires_at})`);
     }
     result.limitations.forEach(value => addItem(document.querySelector("#limitations"), value));
     output.classList.remove("hidden");

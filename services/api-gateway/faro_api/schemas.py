@@ -27,7 +27,7 @@ class RiskAssessment(BaseModel):
     score: int = Field(ge=0, le=100)
     level: Literal["inconclusive", "low", "moderate", "high", "critical"]
     confidence: Literal["low", "medium", "high"]
-    coverage: Literal["lexical_only", "lexical_and_submitted_html"]
+    coverage: Literal["lexical_only", "lexical_and_submitted_html", "lexical_and_feed", "lexical_html_and_feed"]
     classification: Literal["suspicion_only"] = "suspicion_only"
     recommendation: str
 
@@ -70,6 +70,23 @@ class CTObservation(BaseModel):
     note: str
 
 
+class ThreatIntelMatch(BaseModel):
+    indicator_type: Literal["url", "hostname"]
+    category: Literal["phishing", "malware", "scam", "brand_impersonation", "other"]
+    source: str
+    observed_at: str
+    expires_at: str
+
+
+class ThreatIntelObservation(BaseModel):
+    status: Literal["disabled", "matched", "no_match"]
+    source: str
+    checked_at: str | None = None
+    snapshot_sha256: str | None = None
+    matches: list[ThreatIntelMatch] = Field(default_factory=list)
+    note: str
+
+
 class AnalysisResult(BaseModel):
     analysis_id: str
     created_at: str
@@ -83,6 +100,7 @@ class AnalysisResult(BaseModel):
     passive_dns: DNSObservation | None = None
     rdap: RDAPObservation | None = None
     certificate_transparency: CTObservation | None = None
+    threat_intel: ThreatIntelObservation | None = None
 
 
 class GraphNode(BaseModel):
