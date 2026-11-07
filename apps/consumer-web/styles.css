@@ -7,3 +7,7 @@
 .investigation-cases button{margin-right:8px;margin-bottom:7px}
 #case-list button{padding:8px 12px;margin:0;font-size:13px}
 #case-status{font-size:13px}
+
+#web-auth { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border, #65758b); border-radius: 0.8rem; }
+#web-auth .auth-action { display: inline-block; margin-right: 1rem; }
+#web-auth .hidden { display: none; }

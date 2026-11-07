@@ -18,3 +18,7 @@ jobs:
         run: python -m pip install '.[dev]'
       - name: Run test suite
         run: python -m pytest
+      - name: Check Python and browser syntax
+        run: |
+          python -m compileall -q services/api-gateway/faro_api
+          node --check apps/consumer-web/main.js

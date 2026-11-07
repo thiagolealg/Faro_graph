@@ -42,6 +42,17 @@ class Storage:
                 created_at TEXT NOT NULL
             )""")
             con.execute('CREATE INDEX IF NOT EXISTS idx_reviews_case ON case_reviews(tenant_id, case_id, created_at)')
+            con.execute("""CREATE TABLE IF NOT EXISTS oidc_pending (
+                state_hash TEXT PRIMARY KEY, verifier TEXT NOT NULL, nonce TEXT NOT NULL,
+                expires_ts INTEGER NOT NULL
+            )""")
+            con.execute("""CREATE TABLE IF NOT EXISTS web_sessions (
+                session_hash TEXT PRIMARY KEY, csrf_hash TEXT NOT NULL, tenant_id TEXT NOT NULL,
+                actor_id TEXT NOT NULL, role TEXT NOT NULL, quota INTEGER NOT NULL,
+                identity_key_id TEXT NOT NULL DEFAULT '', expires_ts INTEGER NOT NULL, revoked_ts INTEGER
+            )""")
+            con.execute('CREATE INDEX IF NOT EXISTS idx_web_sessions_expiry ON web_sessions(expires_ts)')
+
 
     def _connection(self):
         return sqlite3.connect(self.path, timeout=10)
@@ -215,3 +226,39 @@ class Storage:
                 raise RuntimeError('Analise vinculada nao encontrada')
             records.append(saved)
         return case, records
+
+    # Browser OIDC flow is separate from machine-to-machine API keys.
+    def create_oidc_pending(self, state_hash: str, verifier: str, nonce: str, expires_ts: int):
+        with self._connection() as con:
+            con.execute('DELETE FROM oidc_pending WHERE expires_ts < ?', (int(time.time()),))
+            con.execute('INSERT INTO oidc_pending VALUES(?,?,?,?)', (state_hash, verifier, nonce, expires_ts))
+
+    def consume_oidc_pending(self, state_hash: str) -> tuple[str, str] | None:
+        with self._connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            row = con.execute('SELECT verifier,nonce FROM oidc_pending WHERE state_hash=? AND expires_ts>?',
+                              (state_hash, int(time.time()))).fetchone()
+            con.execute('DELETE FROM oidc_pending WHERE state_hash=?', (state_hash,))
+        return tuple(row) if row else None
+
+    def create_web_session(self, session_hash: str, csrf_hash: str, principal, expires_ts: int):
+        with self._connection() as con:
+            con.execute('DELETE FROM web_sessions WHERE expires_ts < ?', (int(time.time()),))
+            con.execute('INSERT INTO web_sessions(session_hash,csrf_hash,tenant_id,actor_id,role,quota,identity_key_id,expires_ts) '
+                        'VALUES(?,?,?,?,?,?,?,?)', (session_hash, csrf_hash, principal.tenant_id,
+                        principal.actor_id, principal.role, principal.hourly_quota, principal.key_id, expires_ts))
+
+    def get_web_session(self, session_hash: str):
+        from .auth import Principal
+        with self._connection() as con:
+            row = con.execute('SELECT csrf_hash,tenant_id,actor_id,role,quota,identity_key_id FROM web_sessions '
+                              'WHERE session_hash=? AND expires_ts>? AND revoked_ts IS NULL',
+                              (session_hash, int(time.time()))).fetchone()
+        if row is None:
+            return None
+        return Principal(row[1], row[2], row[3], row[5], row[4]), row[0]
+
+    def revoke_web_session(self, session_hash: str):
+        with self._connection() as con:
+            con.execute('UPDATE web_sessions SET revoked_ts=? WHERE session_hash=? AND revoked_ts IS NULL',
+                        (int(time.time()), session_hash))

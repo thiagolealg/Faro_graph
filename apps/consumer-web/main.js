@@ -2,6 +2,49 @@
 const form = document.querySelector("#analysis-form");
 let currentAnalysisId = null;
 let selectedCaseId = null;
+let oidcMode = false;
+let csrfToken = null;
+const securityHeaders = (method = "GET") => {
+  if (oidcMode) return ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase())
+    ? {"X-Faro-CSRF": csrfToken || ""} : {};
+  return {"X-Faro-Api-Key": document.querySelector("#token").value};
+};
+async function initAuthentication() {
+  try {
+    const response = await fetch("/v1/auth/config", {cache:"no-store"});
+    if (!response.ok) throw new Error("Falha ao verificar modo de autenticação");
+    const cfg = await response.json();
+    oidcMode = cfg.oidc_enabled === true;
+    if (!oidcMode) return;
+    document.querySelector("#legacy-auth").classList.add("hidden");
+    document.querySelector("#token").required = false;
+    document.querySelector("#web-auth").classList.remove("hidden");
+    const sessionResponse = await fetch("/v1/auth/session", {cache:"no-store"});
+    if (sessionResponse.ok) {
+      const session = await sessionResponse.json();
+      csrfToken = session.csrf_token;
+      text("#web-auth-status", `Conectado: ${session.actor_id} • ${session.tenant_id} (${session.role})`);
+      document.querySelector("#web-logout").classList.remove("hidden");
+    } else {
+      text("#web-auth-status", "Entre com sua identidade corporativa para consultar os dados.");
+      document.querySelector("#web-login").classList.remove("hidden");
+      document.querySelector("#submit").disabled = true;
+    }
+  } catch (error) {
+    text("#status", `Autenticação indisponível: ${error.message}`);
+    document.querySelector("#status").classList.remove("hidden");
+    document.querySelector("#submit").disabled = true;
+  }
+}
+document.querySelector("#web-logout").addEventListener("click", async () => {
+  try {
+    await fetch("/v1/auth/logout", {method:"POST", headers:securityHeaders("POST")});
+  } finally {
+    csrfToken = null;
+    location.reload();
+  }
+});
+initAuthentication();
 const status = document.querySelector("#status");
 const output = document.querySelector("#output");
 const text = (selector, value) => { document.querySelector(selector).textContent = String(value); };
@@ -24,12 +67,12 @@ form.addEventListener("submit", async (event) => {
   const url = document.querySelector("#url").value;
   const observed_html = document.querySelector("#observed_html").value || null;
   try {
-    const options = {method:"POST",headers:{"Content-Type":"application/json","X-Faro-Api-Key":key},body:JSON.stringify({url,observed_html})};
+    const options = {method:"POST",headers:{"Content-Type":"application/json",...securityHeaders("POST")},body:JSON.stringify({url,observed_html})};
     const response = await fetch("/v1/analyses", options);
     const result = await response.json();
     if (!response.ok) throw new Error(Array.isArray(result.detail) ? JSON.stringify(result.detail) : result.detail || "Falha na análise");
     currentAnalysisId = result.analysis_id;
-    const graphResponse = await fetch(`/v1/analyses/${result.analysis_id}/graph`, {headers:{"X-Faro-Api-Key":key}});
+    const graphResponse = await fetch(`/v1/analyses/${result.analysis_id}/graph`, {headers:securityHeaders()});
     const graph = graphResponse.ok ? await graphResponse.json() : {edges:[]};
     text("#risk-level", levels[result.assessment.level] || result.assessment.level);
     text("#score", `${result.assessment.score}/100`);
@@ -79,9 +122,9 @@ form.addEventListener("submit", async (event) => {
 
 
 // v0.6 cases UI: never persist credentials or insert untrusted HTML.
-const caseHeaders = () => ({"Content-Type":"application/json", "X-Faro-Api-Key":document.querySelector("#token").value});
+const caseHeaders = (method = "GET") => ({"Content-Type":"application/json",...securityHeaders(method)});
 async function caseApi(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: caseHeaders(), cache: "no-store" });
+  const response = await fetch(path, { ...options, headers: caseHeaders(options.method || "GET"), cache: "no-store" });
   const body = await response.json();
   if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Operação recusada pela API");
   return body;

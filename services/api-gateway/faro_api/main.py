@@ -6,8 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -22,17 +22,20 @@ from .risk import evaluate
 from .schemas import AnalysisRequest, AnalysisResult, DNSObservation, RDAPObservation, CTObservation, ThreatIntelObservation, Evidence, GraphResult
 from .storage import Storage
 from .url_security import URLValidationError, normalize_url
+from .web_auth import OIDCConfig, OIDCService, SESSION_COOKIE, STATE_COOKIE, SESSION_TTL, PENDING_TTL, CSRF_COOKIE
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 def create_app(db_path: str | None = None, api_key: str | None = None, tenants_json: str | None = None) -> FastAPI:
     configured_key = api_key if api_key is not None else os.getenv("FARO_API_KEY", "")
-    registry = build_registry(configured_key, tenants_json)
+    oidc_config = OIDCConfig.from_env()
+    registry = build_registry(configured_key, tenants_json, allow_empty=oidc_config is not None)
     requests_per_minute = int(os.getenv("FARO_REQUESTS_PER_MINUTE", "120"))
     if not 1 <= requests_per_minute <= 100_000:
         raise RuntimeError("FARO_REQUESTS_PER_MINUTE fora da faixa")
     db = Storage(db_path or os.getenv("FARO_DB_PATH", str(ROOT / ".local" / "faro.sqlite3")))
+    web_auth = OIDCService(oidc_config, db) if oidc_config is not None else None
     dns_enabled = os.getenv("FARO_DNS_ENABLED", "0").lower() in {"1", "true", "yes"}
     dns_collector = PassiveDNSCollector(os.getenv("FARO_DNS_RESOLVER", "1.1.1.1")) if dns_enabled else None
     rdap_enabled = os.getenv("FARO_RDAP_ENABLED", "0").lower() in {"1", "true", "yes"}
@@ -40,15 +43,107 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
     rdap_collector = RDAPCollector() if rdap_enabled else None
     ct_collector = CertificateTransparencyCollector() if ct_enabled else None
     ti_collector = configured_snapshot()
-    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.6.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
+    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.7.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
 
-    def require_key(x_faro_api_key: str | None = Header(default=None)) -> Principal:
-        principal = registry.resolve(x_faro_api_key)
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
+        if request.url.path.startswith('/v1/auth/'):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def require_key(request: Request, x_faro_api_key: str | None = Header(default=None),
+                    x_faro_csrf: str | None = Header(default=None)) -> Principal:
+        if x_faro_api_key is not None:
+            principal = registry.resolve(x_faro_api_key)
+        else:
+            session = web_auth.get(request.cookies.get(SESSION_COOKIE)) if web_auth else None
+            principal = session[0] if session else None
+            if principal and request.method not in {'GET', 'HEAD', 'OPTIONS'}:
+                if (request.headers.get('Origin') != oidc_config.ui_origin or
+                        not web_auth.verify_csrf(x_faro_csrf, session[1])):
+                    raise HTTPException(status_code=403, detail='Origin ou token CSRF invalido')
         if principal is None:
-            raise HTTPException(status_code=401, detail="Credencial de API ausente ou invalida")
+            raise HTTPException(status_code=401, detail="Credencial de API ou sessao ausente ou invalida")
         if not db.consume_request_quota(principal.tenant_id, requests_per_minute):
             raise HTTPException(status_code=429, detail="Limite de requisicoes por minuto excedido", headers={"Retry-After": "60"})
         return principal
+
+    @app.get('/v1/auth/config', tags=['auth'])
+    def auth_config():
+        return {'mode': 'oidc' if web_auth else 'api_key_local', 'oidc_enabled': web_auth is not None,
+                'production_ready': False}
+
+    @app.get('/v1/auth/login', tags=['auth'])
+    def auth_login():
+        if not web_auth:
+            raise HTTPException(status_code=404, detail='OIDC desabilitado')
+        url, state = web_auth.begin()
+        response = RedirectResponse(url, status_code=302)
+        response.set_cookie(STATE_COOKIE, state, max_age=PENDING_TTL, secure=True, httponly=True,
+                            samesite='lax', path='/')
+        return response
+
+    @app.get('/v1/auth/callback', tags=['auth'])
+    def auth_callback(request: Request, code: str = Query(min_length=1, max_length=4096),
+                      state: str = Query(min_length=16, max_length=256)):
+        if not web_auth:
+            raise HTTPException(status_code=404, detail='OIDC desabilitado')
+        try:
+            session, csrf = web_auth.finish(state, request.cookies.get(STATE_COOKIE), code)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail='Conta nao autorizada') from exc
+        except Exception as exc:
+            # Never expose token, provider response or code in an HTTP error.
+            raise HTTPException(status_code=401, detail='Autenticacao OIDC nao concluida') from exc
+        response = RedirectResponse('/', status_code=303)
+        response.delete_cookie(STATE_COOKIE, path='/', secure=True, httponly=True, samesite='lax')
+        response.set_cookie(SESSION_COOKIE, session, secure=True, httponly=True, samesite='lax',
+                            max_age=SESSION_TTL, path='/')
+        response.set_cookie(CSRF_COOKIE, csrf, secure=True, httponly=False, samesite='lax',
+                            max_age=SESSION_TTL, path='/')
+        return response
+
+    @app.get('/v1/auth/session', tags=['auth'])
+    def auth_session(request: Request):
+        if not web_auth:
+            raise HTTPException(status_code=404, detail='OIDC desabilitado')
+        found = web_auth.get(request.cookies.get(SESSION_COOKIE))
+        if not found:
+            raise HTTPException(status_code=401, detail='Sessao expirada ou inexistente')
+        principal, _ = found
+        # CSRF token must be kept only in client memory; no persisted API key.
+        csrf = request.cookies.get(CSRF_COOKIE)
+        if not web_auth.verify_csrf(csrf, found[1]):
+            raise HTTPException(status_code=401, detail='CSRF da sessao indisponivel')
+        return {'tenant_id': principal.tenant_id, 'actor_id': principal.actor_id,
+                'role': principal.role, 'csrf_token': csrf}
+
+    @app.post('/v1/auth/logout', tags=['auth'])
+    def auth_logout(request: Request, x_faro_csrf: str | None = Header(default=None)):
+        if not web_auth:
+            raise HTTPException(status_code=404, detail='OIDC desabilitado')
+        cookie = request.cookies.get(SESSION_COOKIE)
+        found = web_auth.get(cookie)
+        if not found:
+            raise HTTPException(status_code=401, detail='Sessao expirada')
+        if (request.headers.get('Origin') != oidc_config.ui_origin or
+                not web_auth.verify_csrf(x_faro_csrf, found[1])):
+            raise HTTPException(status_code=403, detail='Origin ou token CSRF invalido')
+        web_auth.logout(cookie)
+        response = JSONResponse({'logout': True})
+        response.delete_cookie(SESSION_COOKIE, path='/', secure=True, httponly=True, samesite='lax')
+        response.delete_cookie(CSRF_COOKIE, path='/', secure=True, httponly=False, samesite='lax')
+        return response
 
     def require_analyst(principal: Principal = Depends(require_key)) -> Principal:
         if principal.role not in {"analyst", "admin"}:
@@ -62,7 +157,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
     @app.get("/healthz", tags=["operations"])
     def healthz():
-        return {"status": "ok", "version": "0.6.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False, "reputation_snapshot_enabled": ti_collector is not None}
+        return {"status": "ok", "version": "0.7.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False, "reputation_snapshot_enabled": ti_collector is not None, "oidc_enabled": web_auth is not None}
 
     @app.post("/v1/analyses", response_model=AnalysisResult, status_code=201, tags=["analysis"])
     def analyze(request: AnalysisRequest, principal: Principal = Depends(require_analyst)):
@@ -241,7 +336,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
 # Variavel para execucao com `uvicorn faro_api.main:app`.
 # Testes usam create_app(db_path=..., api_key=...) para isolamento.
-if os.getenv("FARO_API_KEY") or os.getenv("FARO_TENANTS_JSON"):
+if os.getenv("FARO_API_KEY") or os.getenv("FARO_TENANTS_JSON") or os.getenv("FARO_OIDC_CONFIG"):
     app = create_app()
 else:
     app = None

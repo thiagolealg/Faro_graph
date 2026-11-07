@@ -1,6 +1,6 @@
 [project]
 name = "faro-graph"
-version = "0.6.0"
+version = "0.7.0"
 description = "MVP da plataforma FARO: triagem de URLs e grafo de indicadores"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,6 +9,8 @@ dependencies = [
     "pydantic>=2,<3",
     "idna>=3,<4",
     "dnspython>=2.6,<3",
+    "httpx>=0.27,<1",
+    "PyJWT[crypto]>=2.9,<3",
 ]
 
 [project.optional-dependencies]

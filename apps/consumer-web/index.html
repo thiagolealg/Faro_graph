@@ -8,16 +8,23 @@
 </head>
 <body>
   <main class="shell">
-    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.6</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
+    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.7</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
     <section class="hero" aria-labelledby="hero-title">
       <div class="eyebrow">OSINT • ANTIFRAUDE • GRAFO DE INDICADORES</div>
       <h1 id="hero-title">Investigue um link antes de confiar.</h1>
       <p>Receba uma triagem local de sinais técnicos, justificativas e conexões observáveis. Esta versão não visita sites remotamente nem confirma fraudes. DNS, RDAP e CT podem ser consultados quando habilitados pelo operador.</p>
+      <section id="web-auth" class="hidden" aria-label="Identidade corporativa">
+        <p id="web-auth-status" role="status">Verificando sessão…</p>
+        <a id="web-login" class="auth-action hidden" href="/v1/auth/login">Entrar com identidade corporativa</a>
+        <button id="web-logout" class="hidden" type="button">Encerrar sessão</button>
+      </section>
       <form id="analysis-form">
         <label for="url">URL ou domínio</label>
         <input id="url" type="text" required maxlength="2048" placeholder="https://exemplo.com.br" autocomplete="off" spellcheck="false">
-        <label for="token">Chave da API (somente nesta sessão)</label>
-        <input id="token" type="password" required placeholder="FARO_API_KEY" autocomplete="off">
+        <div id="legacy-auth">
+          <label for="token">Chave da API (somente nesta sessão, em ambiente local)</label>
+          <input id="token" type="password" required placeholder="FARO_API_KEY" autocomplete="off">
+        </div>
         <details><summary>HTML opcional para análise estrutural (fornecido por você)</summary>
           <label for="observed_html">Cole o HTML de teste — sem credenciais ou dados pessoais</label>
           <textarea id="observed_html" rows="5" maxlength="100000" placeholder="&lt;form&gt;...&lt;/form&gt;"></textarea>

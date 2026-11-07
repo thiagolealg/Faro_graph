@@ -1,4 +1,4 @@
-# FARO Graph MVP v0.6
+# FARO Graph MVP v0.7
 
 O projeto possui um **MVP funcional para execução local**, preservando a arquitetura documental original.
 
@@ -77,3 +77,11 @@ Consulte [o contrato completo](docs/delivery/08-mvp-v05-threat-intelligence.md).
 - Validação de permissões por tenant, estados concorrentes, conteúdo sensível e dados persistidos em SQLite.
 
 Contratos e limitações: [docs/delivery/09-mvp-v06-casos-grafo-dossie.md](docs/delivery/09-mvp-v06-casos-grafo-dossie.md).
+
+## v0.7 — Login corporativo OIDC e sessões web (opcional)
+
+O painel pode usar **Authorization Code + PKCE**, sessão `Secure`/`HttpOnly`, CSRF e identidade vinculada a uma organização. Chaves de serviço seguem disponíveis para integrações, mas não precisam ser digitadas no navegador em modo OIDC.
+
+**Configuração:** veja [documentação v0.7](docs/delivery/10-mvp-v07-oidc-sessoes.md) para `FARO_OIDC_CONFIG` e `FARO_OIDC_USERS_JSON`, contratos, modelos de usuário e políticas de segurança. Configuração errada interrompe o startup. É necessário HTTPS e provedor de identidade confiável. Nenhum segredo deve ser enviado ao GitHub.
+
+**Não equivale a prontidão de produção:** integração de IdP real, hardening de proxy, mitigação de abuso no login, MFA no IdP, política de expurgo, revisão LGPD e auditoria de infraestrutura continuam pendentes (#20, #21). Navegação remota depende do sandbox #16.

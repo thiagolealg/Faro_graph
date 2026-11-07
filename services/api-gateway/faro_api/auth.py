@@ -26,7 +26,7 @@ class Principal:
 
 
 class KeyRegistry:
-    def __init__(self, legacy_key: str | None, tenants_json: str | None):
+    def __init__(self, legacy_key: str | None, tenants_json: str | None, *, allow_empty: bool = False):
         self._by_hash: dict[str, Principal] = {}
         if tenants_json:
             try:
@@ -57,7 +57,7 @@ class KeyRegistry:
                 raise RuntimeError('FARO_TENANTS_JSON invalido; confira o formato e os segredos') from exc
         elif legacy_key:
             self._by_hash[self._digest(legacy_key)] = Principal('local', 'local-user', 'admin', 'legacy-local', 60)
-        else:
+        elif not allow_empty:
             raise RuntimeError('Configure FARO_TENANTS_JSON ou FARO_API_KEY para a API local')
 
     @staticmethod
@@ -75,7 +75,7 @@ class KeyRegistry:
         return None
 
 
-def build_registry(legacy_key: str | None, tenants_json: str | None = None) -> KeyRegistry:
+def build_registry(legacy_key: str | None, tenants_json: str | None = None, *, allow_empty: bool = False) -> KeyRegistry:
     if tenants_json is None:
         tenants_json = os.getenv('FARO_TENANTS_JSON')
-    return KeyRegistry(legacy_key, tenants_json)
+    return KeyRegistry(legacy_key, tenants_json, allow_empty=allow_empty)

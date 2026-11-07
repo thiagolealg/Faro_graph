@@ -1,8 +1,8 @@
-> **MVP funcional v0.6 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
+> **MVP funcional v0.7 implementado:** consulte [README_MVP.md](README_MVP.md) para instalar, executar e testar a aplicação. O restante do repositório inclui o blueprint para versões futuras.
 
 # FARO — OSINT, Antiphishing e Inteligência Investigativa de Fraudes
 
-**Estado:** MVP local v0.6 em desenvolvimento + blueprint de engenharia (sem prontidão para produção).  
+**Estado:** MVP local v0.7 em desenvolvimento + blueprint de engenharia (sem prontidão para produção).  
 **Versão documental:** 1.1 · **Data:** 07/11/2026 · **Classificação:** arquitetura inicial para validação.  
 **Escopo:** análise de sites/URLs suspeitos, detecção de phishing, monitoramento de marcas, mapeamento de redes de fraude e atribuição investigativa baseada em evidências.
 
