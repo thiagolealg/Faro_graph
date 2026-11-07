@@ -8,7 +8,7 @@
 </head>
 <body>
   <main class="shell">
-    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.4</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
+    <header class="masthead"><div class="logo">◈ FARO <span class="tag">MVP • v0.6</span></div><p>Inteligência preventiva de sites e vínculos digitais</p></header>
     <section class="hero" aria-labelledby="hero-title">
       <div class="eyebrow">OSINT • ANTIFRAUDE • GRAFO DE INDICADORES</div>
       <h1 id="hero-title">Investigue um link antes de confiar.</h1>
@@ -38,6 +38,38 @@
       <ul id="reputation"></ul></div></div>
       <div class="limits"><h3>Limitações</h3><ul id="limitations"></ul></div>
       <small id="analysis-id"></small>
+      <section aria-labelledby="case-title-heading" class="investigation-cases">
+        <h3 id="case-title-heading">Casos investigativos</h3>
+        <p>Associe várias análises a um mesmo caso. Vínculos compartilhados são contexto, não comprovação de autoria.</p>
+        <form id="case-form">
+          <label for="case-title">Título do novo caso (sem URLs ou dados pessoais)</label>
+          <input id="case-title" required minlength="5" maxlength="120" placeholder="Ex.: Campanha suspeita de domínio imitador" autocomplete="off">
+          <button id="case-create" type="submit">Criar caso com a análise atual</button>
+        </form>
+        <button id="case-refresh" type="button">Listar meus casos</button>
+        <ul id="case-list" aria-label="Casos da organização"></ul>
+        <div id="case-workspace" class="hidden">
+          <h4 id="case-selected">Caso selecionado</h4>
+          <p id="case-info"></p>
+          <button id="case-link" type="button">Adicionar análise atual a este caso</button>
+          <button id="case-export" type="button">Exportar dossiê JSON com SHA-256</button>
+          <h4>Indicadores compartilhados (sem atribuição)</h4>
+          <ul id="case-correlations"></ul>
+          <form id="case-review-form">
+            <label for="case-review-decision">Parecer humano</label>
+            <select id="case-review-decision">
+              <option value="inconclusive">Inconclusivo</option>
+              <option value="suspected">Suspeita — não confirmada</option>
+              <option value="false_positive">Possível falso positivo</option>
+              <option value="requires_escalation">Exige escalonamento</option>
+            </select>
+            <label for="case-review-rationale">Justificativa (sem dados pessoais, links ou credenciais)</label>
+            <textarea id="case-review-rationale" rows="3" minlength="20" maxlength="1000" required></textarea>
+            <button type="submit">Registrar revisão auditável</button>
+          </form>
+        </div>
+        <p id="case-status" role="status" aria-live="polite"></p>
+      </section>
     </section>
     <footer>FARO • MVP demonstrativo • Evidências, não acusações. Nenhuma identificação pessoal automática.</footer>
   </main>

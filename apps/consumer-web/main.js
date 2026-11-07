@@ -1,5 +1,7 @@
 "use strict";
 const form = document.querySelector("#analysis-form");
+let currentAnalysisId = null;
+let selectedCaseId = null;
 const status = document.querySelector("#status");
 const output = document.querySelector("#output");
 const text = (selector, value) => { document.querySelector(selector).textContent = String(value); };
@@ -26,6 +28,7 @@ form.addEventListener("submit", async (event) => {
     const response = await fetch("/v1/analyses", options);
     const result = await response.json();
     if (!response.ok) throw new Error(Array.isArray(result.detail) ? JSON.stringify(result.detail) : result.detail || "Falha na análise");
+    currentAnalysisId = result.analysis_id;
     const graphResponse = await fetch(`/v1/analyses/${result.analysis_id}/graph`, {headers:{"X-Faro-Api-Key":key}});
     const graph = graphResponse.ok ? await graphResponse.json() : {edges:[]};
     text("#risk-level", levels[result.assessment.level] || result.assessment.level);
@@ -72,4 +75,91 @@ form.addEventListener("submit", async (event) => {
     text("#status", "Triagem concluída.");
   } catch (error) { text("#status", `Não foi possível concluir: ${error.message}`); }
   finally { button.disabled = false; }
+});
+
+
+// v0.6 cases UI: never persist credentials or insert untrusted HTML.
+const caseHeaders = () => ({"Content-Type":"application/json", "X-Faro-Api-Key":document.querySelector("#token").value});
+async function caseApi(path, options = {}) {
+  const response = await fetch(path, { ...options, headers: caseHeaders(), cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Operação recusada pela API");
+  return body;
+}
+function caseMessage(message) { text("#case-status", message); }
+async function selectCase(caseId) {
+  const item = await caseApi(`/v1/cases/${caseId}`);
+  selectedCaseId = item.id;
+  document.querySelector("#case-workspace").classList.remove("hidden");
+  text("#case-selected", item.title);
+  text("#case-info", `Estado: ${item.status} • ${item.analysis_ids.length} análise(s) • ${item.reviews.length} revisão(ões)`);
+  const graph = await caseApi(`/v1/cases/${caseId}/graph`);
+  const list = document.querySelector("#case-correlations");
+  list.replaceChildren();
+  for (const finding of graph.shared_indicators) {
+    addItem(list, `${finding.node_id} (${finding.analysis_ids.length} análises; ${finding.interpretation})`);
+  }
+  if (graph.shared_indicators.length === 0) addItem(list, "Sem indicadores técnicos repetidos nas análises vinculadas.");
+  caseMessage("Caso carregado. Coincidências não identificam responsáveis.");
+}
+async function refreshCases() {
+  const items = await caseApi("/v1/cases");
+  const list = document.querySelector("#case-list");
+  list.replaceChildren();
+  for (const item of items) {
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `${item.title} (${item.status})`;
+    button.addEventListener("click", () => selectCase(item.id).catch(err => caseMessage(err.message)));
+    li.appendChild(button);
+    list.appendChild(li);
+  }
+  if (!items.length) addItem(list, "Nenhum caso nesta organização.");
+}
+document.querySelector("#case-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!currentAnalysisId) { caseMessage("Faça uma análise antes de criar o caso."); return; }
+  try {
+    const item = await caseApi("/v1/cases", {method:"POST",body:JSON.stringify({
+      title: document.querySelector("#case-title").value, analysis_ids:[currentAnalysisId]})});
+    await refreshCases();
+    await selectCase(item.id);
+    caseMessage("Caso criado e análise associada.");
+  } catch (err) { caseMessage(err.message); }
+});
+document.querySelector("#case-refresh").addEventListener("click", () => refreshCases().catch(err => caseMessage(err.message)));
+document.querySelector("#case-link").addEventListener("click", async () => {
+  if (!selectedCaseId || !currentAnalysisId) { caseMessage("Selecione um caso e faça uma análise."); return; }
+  try {
+    await caseApi(`/v1/cases/${selectedCaseId}/analyses`, {method:"POST",body:JSON.stringify({analysis_id:currentAnalysisId})});
+    await selectCase(selectedCaseId);
+    caseMessage("Análise associada ao caso.");
+  } catch (err) { caseMessage(err.message); }
+});
+document.querySelector("#case-review-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!selectedCaseId) return;
+  try {
+    await caseApi(`/v1/cases/${selectedCaseId}/reviews`, {method:"POST",body:JSON.stringify({
+      decision:document.querySelector("#case-review-decision").value,
+      rationale:document.querySelector("#case-review-rationale").value})});
+    document.querySelector("#case-review-rationale").value = "";
+    await selectCase(selectedCaseId);
+    caseMessage("Revisão registrada com data e autoria interna.");
+  } catch (err) { caseMessage(err.message); }
+});
+document.querySelector("#case-export").addEventListener("click", async () => {
+  if (!selectedCaseId) return;
+  try {
+    const documentBody = await caseApi(`/v1/cases/${selectedCaseId}/dossier`);
+    const file = new Blob([JSON.stringify(documentBody,null,2)], {type:"application/json"});
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `faro-case-${selectedCaseId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    caseMessage("Dossiê exportado. SHA-256 não é assinatura digital.");
+  } catch (err) { caseMessage(err.message); }
 });

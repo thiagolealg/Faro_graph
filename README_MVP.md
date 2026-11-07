@@ -1,4 +1,4 @@
-# FARO Graph MVP v0.5
+# FARO Graph MVP v0.6
 
 O projeto possui um **MVP funcional para execução local**, preservando a arquitetura documental original.
 
@@ -66,3 +66,14 @@ export FARO_TI_PATH=/caminho/absoluto/feed-autorizado.jsonl
 ```
 
 Consulte [o contrato completo](docs/delivery/08-mvp-v05-threat-intelligence.md). Reinicie o processo após atualizar o arquivo. Nenhum endpoint remoto de fornecedor é acionado pelo módulo v0.5.
+
+
+## v0.6 — Casos investigativos e dossiês
+
+- Investigações por organização: casos com até 20 análises vinculadas, revisões humanas auditáveis e fluxo de estados administrativo.
+- Grafo consolidado de indicadores compartilhados, **sem** atribuir mesma autoria ou operação por IP/DNS/CDN em comum.
+- Dossiê JSON com análises, limitações, proveniência e SHA-256 sobre serialização estável. **Não é assinatura digital nem cadeia de custódia forense.**
+- Interface local para criar casos, adicionar análises, registrar revisão e exportar relatório.
+- Validação de permissões por tenant, estados concorrentes, conteúdo sensível e dados persistidos em SQLite.
+
+Contratos e limitações: [docs/delivery/09-mvp-v06-casos-grafo-dossie.md](docs/delivery/09-mvp-v06-casos-grafo-dossie.md).

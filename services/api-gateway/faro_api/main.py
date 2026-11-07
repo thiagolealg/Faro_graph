@@ -12,6 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from .auth import Principal, build_registry
+from .case_schemas import CaseCreateRequest, CaseLinkRequest, CaseReviewRequest, CaseStatusRequest
+from .cases import aggregate_case_graph, build_dossier
 from .graph import build_graph
 from .passive_dns import PassiveDNSCollector
 from .public_intel import RDAPCollector, CertificateTransparencyCollector
@@ -38,7 +40,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
     rdap_collector = RDAPCollector() if rdap_enabled else None
     ct_collector = CertificateTransparencyCollector() if ct_enabled else None
     ti_collector = configured_snapshot()
-    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.5.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
+    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.6.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
 
     def require_key(x_faro_api_key: str | None = Header(default=None)) -> Principal:
         principal = registry.resolve(x_faro_api_key)
@@ -60,7 +62,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
     @app.get("/healthz", tags=["operations"])
     def healthz():
-        return {"status": "ok", "version": "0.5.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False, "reputation_snapshot_enabled": ti_collector is not None}
+        return {"status": "ok", "version": "0.6.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled, "rdap_enabled": rdap_enabled, "ct_enabled": ct_enabled, "live_tls_enabled": False, "reputation_snapshot_enabled": ti_collector is not None}
 
     @app.post("/v1/analyses", response_model=AnalysisResult, status_code=201, tags=["analysis"])
     def analyze(request: AnalysisRequest, principal: Principal = Depends(require_analyst)):
@@ -158,6 +160,74 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
         if not saved:
             raise HTTPException(status_code=404, detail="Analise inexistente")
         return saved[1]
+
+    # Investigation cases are strictly tenant-scoped. They group existing scans;
+    # neither the case label nor a human review establishes identity or guilt.
+    @app.post("/v1/cases", status_code=201, tags=["cases"])
+    def create_case(request: CaseCreateRequest, principal: Principal = Depends(require_analyst)):
+        case_id = str(uuid.uuid4())
+        try:
+            return db.create_case(case_id, request.title, [str(a) for a in request.analysis_ids],
+                                  principal.tenant_id, principal.actor_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/v1/cases", tags=["cases"])
+    def list_cases(limit: int = Query(default=50, ge=1, le=100), principal: Principal = Depends(require_key)):
+        return db.list_cases(principal.tenant_id, limit)
+
+    @app.get("/v1/cases/{case_id}", tags=["cases"])
+    def get_case(case_id: uuid.UUID, principal: Principal = Depends(require_key)):
+        record = db.get_case(str(case_id), principal.tenant_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Caso inexistente")
+        return record
+
+    @app.post("/v1/cases/{case_id}/analyses", tags=["cases"])
+    def link_analysis(case_id: uuid.UUID, request: CaseLinkRequest, principal: Principal = Depends(require_analyst)):
+        try:
+            return db.add_case_analysis(str(case_id), str(request.analysis_id), principal.tenant_id, principal.actor_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/cases/{case_id}/reviews", status_code=201, tags=["cases"])
+    def submit_review(case_id: uuid.UUID, request: CaseReviewRequest, principal: Principal = Depends(require_analyst)):
+        try:
+            return db.review_case(str(case_id), str(uuid.uuid4()), request.decision, request.rationale,
+                                  principal.tenant_id, principal.actor_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.patch("/v1/cases/{case_id}/status", tags=["cases"])
+    def change_case_status(case_id: uuid.UUID, request: CaseStatusRequest, principal: Principal = Depends(require_admin)):
+        try:
+            return db.update_case_status(str(case_id), request.status, request.expected_version,
+                                         principal.tenant_id, principal.actor_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    def case_records(case_id: uuid.UUID, principal: Principal):
+        saved = db.get_case_records(str(case_id), principal.tenant_id)
+        if saved is None:
+            raise HTTPException(status_code=404, detail="Caso inexistente")
+        return saved
+
+    @app.get("/v1/cases/{case_id}/graph", tags=["cases", "graph"])
+    def get_case_graph(case_id: uuid.UUID, principal: Principal = Depends(require_key)):
+        _, records = case_records(case_id, principal)
+        return aggregate_case_graph(str(case_id), records)
+
+    @app.get("/v1/cases/{case_id}/dossier", tags=["cases"])
+    def get_case_dossier(case_id: uuid.UUID, principal: Principal = Depends(require_key)):
+        record, records = case_records(case_id, principal)
+        dossier = build_dossier(record, records)
+        return JSONResponse(content=dossier, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/v1/audit", dependencies=[Depends(require_admin)], tags=["operations"])
     def get_audit(limit: int = Query(default=100, ge=1, le=500), principal: Principal = Depends(require_admin)):

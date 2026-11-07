@@ -43,3 +43,16 @@
 **I3:** o padrão continua sem requisições remotas. Dados malformados bloqueiam o startup quando a integração está ativa. Logs não devem registrar feeds e URLs completas sensíveis. Implementar futuramente assinatura de feeds, limites de retenção e rotação sem reinício (#21).
 
 **Critérios antes de produção pública:** #20 autenticação OIDC/sessão web e proteção contra abuso, #16 sandbox, contratos de uso dos fornecedores, telemetria e políticas LGPD.
+
+
+## Atualização v0.6 — gestão investigativa e dossiês (07/11/2026)
+
+**I5 parcialmente entregue:** casos persistidos e isolados por organização, até 20 análises por caso, revisão humana imutável via API, fluxo de estados com versão otimista, grafo consolidado com proveniência e dossiê JSON com SHA-256. Os pareces humanos são hipóteses, não comprovação de envolvimento. Não há automação de atribuição pessoal.
+
+- **#18 (TASK 13):** parcialmente entregue. Faltam gestão avançada de campanhas, contraditório empresarial estruturado, triagem institucional, atribuição com fontes independentes.
+- **#19 (TASK 14):** parcialmente entregue. Hash de conteúdo e exportação JSON pronta; faltam assinatura digital, armazenamento WORM, política formal de cadeia de custódia e PDF.
+- **#20 (TASK 15):** aberto, bloqueia produção pública.
+- **#16 (TASK 11):** aberto, bloqueia investigação dinâmica remota.
+- **#21 (TASK 16):** aberto, políticas de retenção/custos/observabilidade de produção.
+
+**Qualidade:** testes de isolamento multi-tenant e papéis, anti-exfiltração nos relatórios, integridade reprodutível, validação de inputs e fluxo de estados.
