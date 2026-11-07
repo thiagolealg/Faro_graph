@@ -1,6 +1,6 @@
 [project]
 name = "faro-graph"
-version = "0.1.0"
+version = "0.2.0"
 description = "MVP da plataforma FARO: triagem de URLs e grafo de indicadores"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,13 +20,5 @@ addopts = "-q"
 [tool.ruff]
 line-length = 110
 
-[build-system]
-requires = ["setuptools>=69", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-package-dir = {"" = "services/api-gateway"}
-
-[tool.setuptools.packages.find]
-where = ["services/api-gateway"]
-include = ["faro_api*"]
+[tool.setuptools.package-data]
+"faro_api" = ["data/*.dat"]

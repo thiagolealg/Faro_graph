@@ -4,7 +4,9 @@ from __future__ import annotations
 import ipaddress
 import re
 from dataclasses import dataclass
-from urllib.parse import urlsplit, urlunsplit, quote
+from urllib.parse import urlsplit, urlunsplit, quote, unquote
+
+from .psl import registrable_domain
 
 import idna
 
@@ -23,13 +25,31 @@ class SafeURL:
     is_idn: bool
 
 
-def _registrable_domain(hostname: str) -> str:
-    # Lista conservadora; versao completa devera usar Public Suffix List atualizada.
-    multi = {"com.br", "net.br", "org.br", "gov.br", "edu.br", "co.uk", "org.uk", "com.au", "co.jp"}
-    parts = hostname.split(".")
-    if len(parts) >= 3 and ".".join(parts[-2:]) in multi:
-        return ".".join(parts[-3:])
-    return ".".join(parts[-2:]) if len(parts) >= 2 else hostname
+_SECRET_PATH_KEYS = {"token", "access_token", "refresh_token", "apikey", "api_key", "key", "secret", "session", "sessionid", "session_id", "reset", "recover", "recovery", "password", "passwd", "otp", "auth", "authorization", "activate", "activation", "verify", "verification", "invite", "invitation", "code", "login", "email", "user", "usuario", "cpf", "cnpj"}
+_SECRET_VALUE = re.compile(r"(?i)(token|secret|key|code|auth|session|password|otp|cpf|email)[_:-]?=.+")
+_EMAIL = re.compile(r"[^/@\s]+@[^/@\s]+\.[^/@\s]+")
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def _redact_path(path: str) -> str:
+    parts = path.split('/')
+    redacted: list[str] = []
+    previous_is_secret_key = False
+    for raw_part in parts:
+        plain = unquote(raw_part)
+        # One more layer catches common double-encoded secrets without decoding output URLs.
+        plain = unquote(plain)
+        key_name = plain.strip().lower().replace('-', '_')
+        secret_key = key_name in _SECRET_PATH_KEYS
+        if raw_part and (previous_is_secret_key or _SECRET_VALUE.fullmatch(plain) or _EMAIL.fullmatch(plain)
+                         or _UUID.fullmatch(plain) or (len(plain) >= 20 and re.fullmatch(r'[A-Za-z0-9_~.+-]+', plain))
+                         or re.fullmatch(r'\d{11,14}', plain)):
+            redacted.append('[REDACTED]')
+        else:
+            # Always percent-encode user-controlled path content to avoid ambiguity.
+            redacted.append(quote(raw_part, safe='%:@!$&\'()*+,;=-._~'))
+        previous_is_secret_key = secret_key
+    return '/'.join(redacted)
 
 
 def normalize_url(raw: str) -> SafeURL:
@@ -74,17 +94,11 @@ def normalize_url(raw: str) -> SafeURL:
         raise URLValidationError("Rotulo de dominio invalido")
     if ascii_host.endswith((".localhost", ".local", ".internal", ".invalid")) or ascii_host == "localhost":
         raise URLValidationError("Dominio local ou reservado nao permitido")
-    # Fragmentos e consultas podem conter tokens. Nunca sao persistidos no resultado.
-    path = parsed.path or "/"
-    # Mascarar segmentos com aparencia de token (UUID, JWT ou segredo longo).
-    segments = path.split("/")
-    redacted = []
-    for seg in segments:
-        if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", seg) or (len(seg) >= 24 and re.fullmatch(r"[A-Za-z0-9_~.+-]+", seg)):
-            redacted.append("[REDACTED]")
-        else:
-            redacted.append(seg)
-    sanitized_path = quote("/".join(redacted), safe="/%:@!$&'()*+,;=-._~[]")
+    # Consultas e fragmentos nunca sao persistidos; tokens no caminho sao mascarados.
+    sanitized_path = _redact_path(parsed.path or "/")
     safe_netloc = ascii_host + ((":" + str(port)) if port is not None else "")
     normalized = urlunsplit((parsed.scheme.lower(), safe_netloc, sanitized_path, "", ""))
-    return SafeURL(normalized, ascii_host, _registrable_domain(ascii_host), parsed.scheme.lower(), port, decoded_host != ascii_host)
+    registrable = registrable_domain(ascii_host)
+    if registrable is None:
+        raise URLValidationError("Forneca um dominio registravel, nao apenas sufixo publico")
+    return SafeURL(normalized, ascii_host, registrable, parsed.scheme.lower(), port, decoded_host != ascii_host)
