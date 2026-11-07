@@ -25,7 +25,7 @@ class SafeURL:
     is_idn: bool
 
 
-_SECRET_PATH_KEYS = {"token", "access_token", "refresh_token", "apikey", "api_key", "key", "secret", "session", "sessionid", "session_id", "reset", "recover", "recovery", "password", "passwd", "otp", "auth", "authorization", "activate", "activation", "verify", "verification", "invite", "invitation", "code", "login", "email", "user", "usuario", "cpf", "cnpj"}
+_SECRET_PATH_KEYS = {"token", "access_token", "refresh_token", "apikey", "api_key", "key", "secret", "session", "sessionid", "session_id", "reset", "recover", "recovery", "password", "passwd", "forgot_password", "reset_password", "password_reset", "magic_link", "verify_email", "signin", "otp", "auth", "authorization", "activate", "activation", "verify", "verification", "invite", "invitation", "code", "login", "email", "user", "usuario", "cpf", "cnpj"}
 _SECRET_VALUE = re.compile(r"(?i)(token|secret|key|code|auth|session|password|otp|cpf|email)[_:-]?=.+")
 _EMAIL = re.compile(r"[^/@\s]+@[^/@\s]+\.[^/@\s]+")
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")

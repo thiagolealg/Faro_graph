@@ -81,3 +81,16 @@ def test_bad_tenant_config_and_duplicate_keys(tmp_path):
     cfg[1]['keys'][0]['key'] = cfg[0]['keys'][0]['key']
     with pytest.raises(RuntimeError):
         create_app(str(tmp_path/'x.db'), api_key=None, tenants_json=json.dumps(cfg))
+
+
+def test_request_rate_limit_applies_per_tenant(tmp_path, monkeypatch):
+    monkeypatch.setenv('FARO_REQUESTS_PER_MINUTE', '2')
+    with TestClient(create_app(db_path=str(tmp_path/'rate.sqlite3'), api_key=None, tenants_json=json.dumps(KEYS))) as client:
+        acme = headers(KEYS[0]['keys'][0]['key'])
+        beta = headers(KEYS[1]['keys'][0]['key'])
+        assert client.get('/v1/analyses', headers=acme).status_code == 200
+        assert client.get('/v1/analyses', headers=acme).status_code == 200
+        blocked = client.get('/v1/analyses', headers=acme)
+        assert blocked.status_code == 429
+        assert blocked.headers['Retry-After'] == '60'
+        assert client.get('/v1/analyses', headers=beta).status_code == 200

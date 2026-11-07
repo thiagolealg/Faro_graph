@@ -32,6 +32,21 @@ class RiskAssessment(BaseModel):
     recommendation: str
 
 
+class DNSRecord(BaseModel):
+    type: Literal["A", "AAAA", "MX", "NS"]
+    value: str
+    ttl: int = Field(ge=0, le=86400)
+
+
+class DNSObservation(BaseModel):
+    status: Literal["disabled", "observed", "partial", "unavailable"]
+    resolver: str
+    checked_at: str | None = None
+    records: list[DNSRecord] = Field(default_factory=list)
+    error_codes: list[str] = Field(default_factory=list)
+    note: str
+
+
 class AnalysisResult(BaseModel):
     analysis_id: str
     created_at: str
@@ -42,6 +57,7 @@ class AnalysisResult(BaseModel):
     assessment: RiskAssessment
     evidence: list[Evidence]
     limitations: list[str]
+    passive_dns: DNSObservation | None = None
 
 
 class GraphNode(BaseModel):

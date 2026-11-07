@@ -1,4 +1,4 @@
-# FARO Graph MVP v0.1
+# FARO Graph MVP v0.3
 
 O projeto possui um **MVP funcional para execução local**, preservando a arquitetura documental original.
 
@@ -36,3 +36,22 @@ PYTHONPATH=services/api-gateway uvicorn faro_api.main:app --host 127.0.0.1 --por
 Para desenvolvimento local, `FARO_API_KEY` permanece disponível como compatibilidade. Em implantação multi-organização, utilize `FARO_TENANTS_JSON` armazenada em gerenciador de segredos. Não exponha a interface HTML com chave de serviço em ambiente compartilhado; autenticação web com sessão/OIDC e controles de produção continuam pendentes.
 
 **Limites de v0.2:** ainda não há navegação remota, inspeção DNS/RDAP/TLS em produção, atribuição de pessoas, bloqueio de SSRF em coletores ativos ou rate limit distribuído por segundo. A quota horária em SQLite é somente uma proteção inicial contra consumo excessivo. O snapshot PSL deve ser atualizado periodicamente e acompanhado de data de origem.
+
+## v0.3 — DNS passivo opt-in, grafo e CI corrigido
+
+- Instalador Python empacota somente `faro_api`; elimina o conflito de *flat layout* detectado no GitHub Actions do v0.2.
+- DNS passivo opcional via `dnspython`, consultando **apenas um resolvedor recursivo público configurado**, não o site investigado.
+- Consulta A, AAAA, MX e NS, com limite de respostas, tempo e dados; IPs não globais são filtrados; coleta de TXT desativada.
+- Proveniência, data de observação, TTL, falhas e status `observed` / `partial` / `unavailable` / `disabled`.
+- Arestas temporais no grafo para vínculos DNS; relacionamento com IP ou serviço compartilhado **não comprova envolvimento**.
+- Rate limiting inicial de requisições por minuto por organização, além da quota horária de análises.
+
+Configuração opcional (exige rede e autorização do operador para consultar DNS públicos):
+
+```sh
+export FARO_DNS_ENABLED=1
+export FARO_DNS_RESOLVER=1.1.1.1
+export FARO_REQUESTS_PER_MINUTE=120
+```
+
+**Avisos:** DNS passivo divulga o hostname ao provedor recursivo configurado; a aplicação não coleta páginas remotas. Desabilitado por padrão. RDAP, TLS, CT, feeds, sandbox web e investigação de pessoas continuam pendentes. A implementação não possui controles operacionais suficientes para exposição pública irrestrita.

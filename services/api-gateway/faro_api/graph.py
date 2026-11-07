@@ -1,8 +1,8 @@
 """Grafo explicavel de indicadores. Nao faz atribuicao de pessoas ou culpabilidade."""
-from .schemas import GraphNode, GraphEdge, GraphResult
+from .schemas import GraphNode, GraphEdge, GraphResult, DNSObservation
 
 
-def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict) -> GraphResult:
+def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrable_domain: str, evidence: list[dict], extra: dict, passive_dns: DNSObservation | None = None) -> GraphResult:
     nodes = [
         GraphNode(id="url:"+normalized_url, kind="url", label=normalized_url, status="observed"),
         GraphNode(id="domain:"+hostname, kind="hostname", label=hostname, status="observed"),
@@ -20,4 +20,17 @@ def build_graph(analysis_id: str, normalized_url: str, hostname: str, registrabl
         if ext != hostname:
             nodes.append(GraphNode(id="domain:"+ext, kind="form_target_hostname", label=ext, status="observed"))
             edges.append(GraphEdge(source="domain:"+hostname, target="domain:"+ext, relationship="form_target_in_submitted_html", certainty="observed", evidence_id=form_ev))
+    if passive_dns is not None:
+        for record in passive_dns.records:
+            if record.type in {"A", "AAAA"}:
+                node_id = "ip:" + record.value
+                kind = "ip_address"
+                relationship = "resolved_to_at_scan"
+            else:
+                node_id = "dns:" + record.value
+                kind = "dns_provider_hostname"
+                relationship = "advertised_" + record.type.lower() + "_at_scan"
+            if not any(node.id == node_id for node in nodes):
+                nodes.append(GraphNode(id=node_id, kind=kind, label=record.value, status="observed"))
+            edges.append(GraphEdge(source="domain:" + hostname, target=node_id, relationship=relationship, certainty="observed", evidence_id="ev-dns-001"))
     return GraphResult(analysis_id=analysis_id, nodes=nodes, edges=edges, notice="Relacionamentos tecnicos nao provam identidade, participacao ou autoria criminosa. Conteudo HTML e fornecido pelo usuario e nao verificado remotamente.")

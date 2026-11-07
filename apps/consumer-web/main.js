@@ -34,10 +34,15 @@ form.addEventListener("submit", async (event) => {
     text("#coverage", coverageLabels[result.assessment.coverage] || result.assessment.coverage);
     text("#recommendation", result.assessment.recommendation);
     text("#analysis-id", `ID: ${result.analysis_id} • ${result.hostname}`);
-    for (const id of ["#evidence","#graph","#limitations"]) document.querySelector(id).replaceChildren();
+    for (const id of ["#evidence","#graph","#limitations","#dns"]) document.querySelector(id).replaceChildren();
     for (const ev of result.evidence) addItem(document.querySelector("#evidence"), `${ev.title}: ${ev.detail} [${ev.source}]`);
     if (!result.evidence.length) addItem(document.querySelector("#evidence"), "Nenhum sinal detectado nesta cobertura restrita. Isso não comprova segurança.");
     for (const edge of graph.edges) addItem(document.querySelector("#graph"), `${edge.source} → ${edge.target} (${edge.relationship}; ${edge.certainty})`);
+    if (result.passive_dns) {
+      addItem(document.querySelector("#dns"), `Estado: ${result.passive_dns.status} — ${result.passive_dns.note}`);
+      for (const record of result.passive_dns.records) addItem(document.querySelector("#dns"), `${record.type}: ${record.value} (TTL: ${record.ttl}s)`);
+      if (result.passive_dns.error_codes.length) addItem(document.querySelector("#dns"), `Consultas indisponíveis ou filtradas: ${result.passive_dns.error_codes.join(", ")}`);
+    }
     result.limitations.forEach(value => addItem(document.querySelector("#limitations"), value));
     output.classList.remove("hidden");
     text("#status", "Triagem concluída.");

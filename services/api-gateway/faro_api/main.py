@@ -13,8 +13,9 @@ from pydantic import ValidationError
 
 from .auth import Principal, build_registry
 from .graph import build_graph
+from .passive_dns import PassiveDNSCollector
 from .risk import evaluate
-from .schemas import AnalysisRequest, AnalysisResult, GraphResult
+from .schemas import AnalysisRequest, AnalysisResult, DNSObservation, Evidence, GraphResult
 from .storage import Storage
 from .url_security import URLValidationError, normalize_url
 
@@ -24,13 +25,20 @@ ROOT = Path(__file__).resolve().parents[3]
 def create_app(db_path: str | None = None, api_key: str | None = None, tenants_json: str | None = None) -> FastAPI:
     configured_key = api_key if api_key is not None else os.getenv("FARO_API_KEY", "")
     registry = build_registry(configured_key, tenants_json)
+    requests_per_minute = int(os.getenv("FARO_REQUESTS_PER_MINUTE", "120"))
+    if not 1 <= requests_per_minute <= 100_000:
+        raise RuntimeError("FARO_REQUESTS_PER_MINUTE fora da faixa")
     db = Storage(db_path or os.getenv("FARO_DB_PATH", str(ROOT / ".local" / "faro.sqlite3")))
-    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.2.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
+    dns_enabled = os.getenv("FARO_DNS_ENABLED", "0").lower() in {"1", "true", "yes"}
+    dns_collector = PassiveDNSCollector(os.getenv("FARO_DNS_RESOLVER", "1.1.1.1")) if dns_enabled else None
+    app = FastAPI(title="FARO — MVP OSINT & Antiphishing", version="0.3.0", description="Motor lexical offline, HTML opcional fornecido pelo usuario, grafo de indicadores sem atribuicao de pessoas.")
 
     def require_key(x_faro_api_key: str | None = Header(default=None)) -> Principal:
         principal = registry.resolve(x_faro_api_key)
         if principal is None:
             raise HTTPException(status_code=401, detail="Credencial de API ausente ou invalida")
+        if not db.consume_request_quota(principal.tenant_id, requests_per_minute):
+            raise HTTPException(status_code=429, detail="Limite de requisicoes por minuto excedido", headers={"Retry-After": "60"})
         return principal
 
     def require_analyst(principal: Principal = Depends(require_key)) -> Principal:
@@ -45,7 +53,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
     @app.get("/healthz", tags=["operations"])
     def healthz():
-        return {"status": "ok", "version": "0.2.0", "remote_fetch_enabled": False}
+        return {"status": "ok", "version": "0.3.0", "remote_fetch_enabled": False, "passive_dns_enabled": dns_enabled}
 
     @app.post("/v1/analyses", response_model=AnalysisResult, status_code=201, tags=["analysis"])
     def analyze(request: AnalysisRequest, principal: Principal = Depends(require_analyst)):
@@ -56,6 +64,12 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
         if not db.consume_analysis_quota(principal.tenant_id, principal.hourly_quota):
             raise HTTPException(status_code=429, detail="Quota horaria de analises excedida")
         assessment, evidence, extras = evaluate(target, request.observed_html)
+        passive_dns = dns_collector.collect(target.hostname) if dns_collector else DNSObservation(
+            status="disabled", resolver="not_configured", note="DNS passivo desabilitado na configuracao.")
+        if passive_dns.records:
+            evidence.append(Evidence(id="ev-dns-001", code="passive_dns_observation", title="DNS passivo observado",
+                detail="Respostas DNS publicas consultadas para o dominio; nao comprovam participacao em fraude.",
+                source="public_recursive_dns", impact=0, confidence="medium"))
         analysis_id = str(uuid.uuid4())
         result = AnalysisResult(
             analysis_id=analysis_id,
@@ -65,14 +79,15 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
             registrable_domain=target.registrable_domain,
             assessment=assessment,
             evidence=evidence,
+            passive_dns=passive_dns,
             limitations=[
-                "Nao ha coleta remota de paginas, consultas RDAP, DNS ou feeds de ameaca nesta entrega.",
+                "Nao ha navegacao remota, consultas RDAP/TLS ou feeds de ameaca nesta entrega. DNS passivo e opcional.",
                 "HTML opcional e fornecido pelo solicitante e nao e uma evidencia independente.",
                 "A pontuacao e heuristica, nao uma probabilidade calibrada ou confirmacao de fraude.",
                 "O grafo representa indicadores observados/hipoteses, nao responsaveis identificados.",
             ],
         )
-        graph = build_graph(analysis_id, target.url, target.hostname, target.registrable_domain, [e.model_dump() for e in evidence], extras)
+        graph = build_graph(analysis_id, target.url, target.hostname, target.registrable_domain, [e.model_dump() for e in evidence], extras, passive_dns)
         db.save(result.model_dump(), graph.model_dump(), tenant_id=principal.tenant_id)
         db.audit(principal.tenant_id, principal.actor_id, "analysis.created", analysis_id)
         return result
@@ -114,7 +129,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None, tenants_j
 
 # Variavel para execucao com `uvicorn faro_api.main:app`.
 # Testes usam create_app(db_path=..., api_key=...) para isolamento.
-if os.getenv("FARO_API_KEY"):
+if os.getenv("FARO_API_KEY") or os.getenv("FARO_TENANTS_JSON"):
     app = create_app()
 else:
     app = None

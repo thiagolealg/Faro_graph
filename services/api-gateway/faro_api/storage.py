@@ -22,6 +22,7 @@ class Storage:
                 con.execute('ALTER TABLE analyses ADD COLUMN tenant_id TEXT NOT NULL DEFAULT "local"')
             con.execute('CREATE INDEX IF NOT EXISTS idx_analyses_tenant_created ON analyses(tenant_id, created_at DESC)')
             con.execute('CREATE TABLE IF NOT EXISTS usage (tenant_id TEXT NOT NULL, bucket INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(tenant_id,bucket))')
+            con.execute('CREATE TABLE IF NOT EXISTS request_usage (tenant_id TEXT NOT NULL, bucket INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(tenant_id,bucket))')
             con.execute('CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, actor_id TEXT NOT NULL, action TEXT NOT NULL, object_id TEXT, created_at TEXT NOT NULL)')
             con.execute('CREATE INDEX IF NOT EXISTS idx_audit_tenant_created ON audit(tenant_id, created_at DESC)')
 
@@ -36,6 +37,16 @@ class Storage:
             if n and n[0] >= hourly_quota:
                 return False
             con.execute('INSERT INTO usage(tenant_id,bucket,count) VALUES(?,?,1) ON CONFLICT(tenant_id,bucket) DO UPDATE SET count=count+1', (tenant_id, bucket))
+            return True
+
+    def consume_request_quota(self, tenant_id: str, max_per_minute: int) -> bool:
+        bucket = int(time.time() // 60)
+        with self._connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            n = con.execute('SELECT count FROM request_usage WHERE tenant_id=? AND bucket=?', (tenant_id, bucket)).fetchone()
+            if n and n[0] >= max_per_minute:
+                return False
+            con.execute('INSERT INTO request_usage(tenant_id,bucket,count) VALUES(?,?,1) ON CONFLICT(tenant_id,bucket) DO UPDATE SET count=count+1', (tenant_id,bucket))
             return True
 
     def audit(self, tenant_id: str, actor_id: str, action: str, object_id: str | None = None):
